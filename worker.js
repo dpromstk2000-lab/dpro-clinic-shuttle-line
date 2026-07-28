@@ -3,7 +3,7 @@
  * Cloudflare Worker API
  *
  * STEP: SHUTTLE-5
- * Version: SHUTTLE-5-WORKER-20260728
+ * Version: SHUTTLE-5-R1-WORKER-20260728
  *
  * 公開ファイルへ秘密情報を記載しないこと。
  * SUPABASE_SECRET_KEY（推奨）または旧SUPABASE_SERVICE_ROLE_KEY、
@@ -11,10 +11,11 @@
  */
 
 const SERVICE_NAME = "DPRO Welfare Shuttle API";
-const WORKER_VERSION = "SHUTTLE-5-WORKER-20260728";
+const WORKER_VERSION = "SHUTTLE-5-R1-WORKER-20260728";
 const DATABASE_VERSION = "SHUTTLE-1-DB-20260727";
 const DEMO_PREPARE_VERSION = "SHUTTLE-5-DEMO-20260728";
 const DEMO_STAFF_PIN = "5678";
+const PIN_PBKDF2_ITERATIONS = 100000;
 const TOKEN_ISSUER = "dpro-welfare-shuttle";
 const TOKEN_AUDIENCE = "dpro-welfare-shuttle-api";
 const MAX_JSON_BYTES = 64 * 1024;
@@ -460,7 +461,7 @@ async function handleStaffLogin(
   const valid =
     staff &&
     typeof staff.pin_hash === "string" &&
-    await verifyPbkdf2Pin(pin, staff.pin_hash);
+    await verifyPbkdf2Pin(pin, staff.pin_hash, env.SESSION_SECRET);
 
   if (!valid) {
     throw new AppError(
@@ -892,7 +893,7 @@ async function handleDemoPrepare(
     corsOrigin,
     requestId,
     async () => {
-      const pinHash = await hashPbkdf2Pin(DEMO_STAFF_PIN);
+      const pinHash = await hashPbkdf2Pin(DEMO_STAFF_PIN, env.SESSION_SECRET);
       const demoData = await supabaseRpc(
         env,
         "shuttle_demo_prepare",
@@ -1150,7 +1151,7 @@ async function handleStaffCreate(
           staff_role: staffRole,
           phone,
           login_id: loginId,
-          pin_hash: pin ? await hashPbkdf2Pin(pin) : null,
+          pin_hash: pin ? await hashPbkdf2Pin(pin, env.SESSION_SECRET) : null,
           is_active: isActive,
         },
         prefer: "return=representation",
@@ -1208,7 +1209,7 @@ async function handleStaffUpdate(
   }
   if (body.pin !== undefined) {
     const pin = optionalPin(body.pin);
-    changes.pin_hash = pin ? await hashPbkdf2Pin(pin) : null;
+    changes.pin_hash = pin ? await hashPbkdf2Pin(pin, env.SESSION_SECRET) : null;
   }
   if (body.isActive !== undefined) {
     changes.is_active = requireBoolean(body.isActive, "有効状態");
@@ -4920,7 +4921,7 @@ async function enforceRateLimit(
   }
 }
 
-async function verifyPbkdf2Pin(pin, storedHash) {
+async function verifyPbkdf2Pin(pin, storedHash, sessionSecret) {
   const parts = storedHash.split("$");
 
   if (
@@ -4935,7 +4936,7 @@ async function verifyPbkdf2Pin(pin, storedHash) {
   if (
     !Number.isInteger(iterations) ||
     iterations < 100000 ||
-    iterations > 600000
+    iterations > PIN_PBKDF2_ITERATIONS
   ) {
     return false;
   }
@@ -4955,7 +4956,7 @@ async function verifyPbkdf2Pin(pin, storedHash) {
 
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(pin),
+    pinSecretMaterial(pin, sessionSecret),
     "PBKDF2",
     false,
     ["deriveBits"]
@@ -4976,12 +4977,12 @@ async function verifyPbkdf2Pin(pin, storedHash) {
   );
 }
 
-async function hashPbkdf2Pin(pin) {
-  const iterations = 210000;
+async function hashPbkdf2Pin(pin, sessionSecret) {
+  const iterations = PIN_PBKDF2_ITERATIONS;
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(pin),
+    pinSecretMaterial(pin, sessionSecret),
     "PBKDF2",
     false,
     ["deriveBits"]
@@ -5002,6 +5003,17 @@ async function hashPbkdf2Pin(pin) {
     base64UrlEncodeBytes(salt),
     base64UrlEncodeBytes(new Uint8Array(bits)),
   ].join("$");
+}
+
+function pinSecretMaterial(pin, sessionSecret) {
+  if (typeof sessionSecret !== "string" || sessionSecret.length < 32) {
+    throw new AppError(
+      503,
+      "SESSION_SECRET_NOT_CONFIGURED",
+      "セッション秘密情報が設定されていません。"
+    );
+  }
+  return encoder.encode(`${pin}\u0000${sessionSecret}`);
 }
 
 async function constantTimeTextEqual(left, right) {
