@@ -2,8 +2,8 @@
  * DPRO 福祉施設送迎 LINE
  * Cloudflare Worker API
  *
- * STEP: SHUTTLE-2
- * Version: SHUTTLE-2-WORKER-20260727
+ * STEP: SHUTTLE-3
+ * Version: SHUTTLE-3-WORKER-20260728
  *
  * 公開ファイルへ秘密情報を記載しないこと。
  * SUPABASE_SECRET_KEY（推奨）または旧SUPABASE_SERVICE_ROLE_KEY、
@@ -11,11 +11,11 @@
  */
 
 const SERVICE_NAME = "DPRO Welfare Shuttle API";
-const WORKER_VERSION = "SHUTTLE-2-WORKER-20260727";
+const WORKER_VERSION = "SHUTTLE-3-WORKER-20260728";
 const DATABASE_VERSION = "SHUTTLE-1-DB-20260727";
 const TOKEN_ISSUER = "dpro-welfare-shuttle";
 const TOKEN_AUDIENCE = "dpro-welfare-shuttle-api";
-const MAX_JSON_BYTES = 32 * 1024;
+const MAX_JSON_BYTES = 64 * 1024;
 const DEFAULT_TOKEN_TTL_SECONDS = 900;
 const MIN_TOKEN_TTL_SECONDS = 300;
 const MAX_TOKEN_TTL_SECONDS = 1800;
@@ -34,7 +34,7 @@ class AppError extends Error {
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const requestId = request.headers.get("cf-ray") || crypto.randomUUID();
     const origin = request.headers.get("origin");
     let corsOrigin = null;
@@ -95,7 +95,7 @@ export default {
               service: SERVICE_NAME,
               workerVersion: WORKER_VERSION,
               requiredDatabaseVersion: DATABASE_VERSION,
-              apiStage: "SHUTTLE-2",
+              apiStage: "SHUTTLE-3",
             },
             200,
             corsOrigin,
@@ -145,7 +145,163 @@ export default {
             requestId
           );
 
+        case "GET /v1/staff":
+          return await handleStaffList(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/staff":
+          return await handleStaffCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/vehicles":
+          return await handleVehicleList(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/vehicles":
+          return await handleVehicleCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/riders":
+          return await handleRiderList(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/riders":
+          return await handleRiderCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/guardians":
+          return await handleGuardianList(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/guardians":
+          return await handleGuardianCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/guardian-rider-links":
+          return await handleGuardianRiderLinkCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/locations":
+          return await handleLocationList(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/locations":
+          return await handleLocationCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/regular-schedules":
+          return await handleRegularScheduleList(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/regular-schedules":
+          return await handleRegularScheduleCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/runs":
+          return await handleRunList(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/runs/generate":
+          return await handleRunGenerate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/change-requests":
+          return await handleChangeRequestList(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/change-requests":
+          return await handleChangeRequestCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/dashboard/today":
+          return await handleTodayDashboard(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
         default:
+          {
+            const dynamicResponse = await handleDynamicRoute(
+              request,
+              env,
+              corsOrigin,
+              requestId,
+              normalizePath(url.pathname)
+            );
+            if (dynamicResponse) {
+              return dynamicResponse;
+            }
+          }
           return routeNotFoundResponse(
             request.method,
             normalizePath(url.pathname),
@@ -584,7 +740,7 @@ async function handleSystemCheck(
     {
       systemCheck: {
         ok: requiredOk,
-        stage: "SHUTTLE-2",
+        stage: "SHUTTLE-3",
         checkedAt: new Date().toISOString(),
         worker: {
           status: "pass",
@@ -632,12 +788,3415 @@ async function handleSystemCheck(
           status: rateLimitConfigured ? "pass" : "recommended",
           bindingName: "RATE_LIMITER",
         },
+        operationalApi: {
+          status: "pass",
+          riderManagement: true,
+          guardianManagement: true,
+          regularSchedules: true,
+          dailyRuns: true,
+          staffAssignments: true,
+          rideEvents: true,
+          changeRequests: true,
+          optimisticLocking: true,
+          idempotencyKeys: true,
+        },
       },
     },
     200,
     corsOrigin,
     requestId
   );
+}
+
+async function handleDynamicRoute(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  path
+) {
+  const method = request.method.toUpperCase();
+  const uuidPattern =
+    "([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})";
+  const routes = [
+    {
+      method: "PATCH",
+      pattern: new RegExp(`^/v1/staff/${uuidPattern}$`, "i"),
+      handler: handleStaffUpdate,
+    },
+    {
+      method: "PATCH",
+      pattern: new RegExp(`^/v1/vehicles/${uuidPattern}$`, "i"),
+      handler: handleVehicleUpdate,
+    },
+    {
+      method: "GET",
+      pattern: new RegExp(`^/v1/riders/${uuidPattern}$`, "i"),
+      handler: handleRiderDetail,
+    },
+    {
+      method: "PATCH",
+      pattern: new RegExp(`^/v1/riders/${uuidPattern}$`, "i"),
+      handler: handleRiderUpdate,
+    },
+    {
+      method: "PATCH",
+      pattern: new RegExp(`^/v1/guardians/${uuidPattern}$`, "i"),
+      handler: handleGuardianUpdate,
+    },
+    {
+      method: "PATCH",
+      pattern: new RegExp(`^/v1/locations/${uuidPattern}$`, "i"),
+      handler: handleLocationUpdate,
+    },
+    {
+      method: "PATCH",
+      pattern: new RegExp(
+        `^/v1/regular-schedules/${uuidPattern}$`,
+        "i"
+      ),
+      handler: handleRegularScheduleUpdate,
+    },
+    {
+      method: "GET",
+      pattern: new RegExp(`^/v1/runs/${uuidPattern}$`, "i"),
+      handler: handleRunDetail,
+    },
+    {
+      method: "PATCH",
+      pattern: new RegExp(`^/v1/runs/${uuidPattern}$`, "i"),
+      handler: handleRunUpdate,
+    },
+    {
+      method: "POST",
+      pattern: new RegExp(
+        `^/v1/runs/${uuidPattern}/staff$`,
+        "i"
+      ),
+      handler: handleRunStaffAssign,
+    },
+    {
+      method: "POST",
+      pattern: new RegExp(
+        `^/v1/runs/${uuidPattern}/staff/remove$`,
+        "i"
+      ),
+      handler: handleRunStaffRemove,
+    },
+    {
+      method: "POST",
+      pattern: new RegExp(
+        `^/v1/stops/${uuidPattern}/events$`,
+        "i"
+      ),
+      handler: handleRideEvent,
+    },
+    {
+      method: "POST",
+      pattern: new RegExp(
+        `^/v1/stops/${uuidPattern}/correct$`,
+        "i"
+      ),
+      handler: handleStopStatusCorrection,
+    },
+    {
+      method: "POST",
+      pattern: new RegExp(
+        `^/v1/change-requests/${uuidPattern}/review$`,
+        "i"
+      ),
+      handler: handleChangeRequestReview,
+    },
+  ];
+
+  for (const route of routes) {
+    const match = path.match(route.pattern);
+    if (match && route.method === method) {
+      return await route.handler(
+        request,
+        env,
+        corsOrigin,
+        requestId,
+        match[1]
+      );
+    }
+  }
+  return null;
+}
+
+async function handleStaffList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+  ]);
+  await enforceRateLimit(request, env, "staff-list", session);
+
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,staff_code,full_name,staff_role,phone,login_id,is_active,last_login_at,updated_at"
+  );
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("order", "staff_role.asc,full_name.asc");
+  params.set("limit", String(getQueryLimit(request, 100, 200)));
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_staff?${params.toString()}`
+  );
+
+  return successResponse(
+    {
+      staff: (rows || []).map(publicStaff),
+      count: Array.isArray(rows) ? rows.length : 0,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleStaffCreate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, ["admin"]);
+  await enforceRateLimit(request, env, "staff-create", session);
+  const body = await readJsonObject(request);
+  const staffCode = requireCode(body.staffCode, "スタッフコード");
+  const fullName = requireString(body.fullName, "氏名", 1, 100);
+  const staffRole = requireEnum(
+    body.staffRole,
+    "権限",
+    ["admin", "dispatcher", "driver", "attendant", "reception"]
+  );
+  const phone = optionalPhone(body.phone, "電話番号");
+  const loginId = optionalLoginId(body.loginId);
+  const pin = optionalPin(body.pin);
+  if ((loginId && !pin) || (!loginId && pin)) {
+    throw new AppError(
+      400,
+      "LOGIN_PAIR_REQUIRED",
+      "ログインIDと暗証番号は両方入力してください。"
+    );
+  }
+  const isActive = optionalBoolean(body.isActive, true, "有効状態");
+
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "staff-create",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      const rows = await supabaseRequest(env, "shuttle_staff", {
+        method: "POST",
+        body: {
+          facility_id: session.facilityId,
+          staff_code: staffCode,
+          full_name: fullName,
+          staff_role: staffRole,
+          phone,
+          login_id: loginId,
+          pin_hash: pin ? await hashPbkdf2Pin(pin) : null,
+          is_active: isActive,
+        },
+        prefer: "return=representation",
+      });
+      const staff = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "create_staff",
+        entityType: "staff",
+        entityId: staff?.id || null,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: { staff: publicStaff(staff) },
+      };
+    }
+  );
+}
+
+async function handleStaffUpdate(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  staffId
+) {
+  const session = await requireSession(request, env, ["admin"]);
+  await enforceRateLimit(request, env, "staff-update", session);
+  const body = await readJsonObject(request);
+  const expectedUpdatedAt = requireIsoTimestamp(
+    body.expectedUpdatedAt,
+    "更新前日時"
+  );
+  const changes = {};
+
+  if (body.fullName !== undefined) {
+    changes.full_name = requireString(body.fullName, "氏名", 1, 100);
+  }
+  if (body.staffRole !== undefined) {
+    changes.staff_role = requireEnum(
+      body.staffRole,
+      "権限",
+      ["admin", "dispatcher", "driver", "attendant", "reception"]
+    );
+  }
+  if (body.phone !== undefined) {
+    changes.phone = optionalPhone(body.phone, "電話番号");
+  }
+  if (body.loginId !== undefined) {
+    changes.login_id = optionalLoginId(body.loginId);
+  }
+  if (body.pin !== undefined) {
+    const pin = optionalPin(body.pin);
+    changes.pin_hash = pin ? await hashPbkdf2Pin(pin) : null;
+  }
+  if (body.isActive !== undefined) {
+    changes.is_active = requireBoolean(body.isActive, "有効状態");
+  }
+  assertHasChanges(changes);
+
+  const params = new URLSearchParams();
+  params.set("id", `eq.${staffId}`);
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("updated_at", `eq.${expectedUpdatedAt}`);
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_staff?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: changes,
+      prefer: "return=representation",
+    }
+  );
+  const staff = Array.isArray(rows) ? rows[0] : null;
+  if (!staff) {
+    throw staleUpdateError();
+  }
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_staff",
+    entityType: "staff",
+    entityId: staffId,
+    requestId,
+    request,
+  });
+  return successResponse(
+    { staff: publicStaff(staff) },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleVehicleList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "vehicle-list", session);
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,vehicle_code,vehicle_name,plate_number,passenger_capacity,wheelchair_capacity,has_lift,vehicle_status,is_active,updated_at"
+  );
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("order", "vehicle_name.asc");
+  params.set("limit", "200");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_vehicles?${params.toString()}`
+  );
+  return successResponse(
+    {
+      vehicles: (rows || []).map(publicVehicle),
+      count: Array.isArray(rows) ? rows.length : 0,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleVehicleCreate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, ["admin"]);
+  await enforceRateLimit(request, env, "vehicle-create", session);
+  const body = await readJsonObject(request);
+  const vehicleCode = requireCode(body.vehicleCode, "車両コード");
+  const vehicleName = requireString(body.vehicleName, "車両名", 1, 100);
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "vehicle-create",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      const rows = await supabaseRequest(env, "shuttle_vehicles", {
+        method: "POST",
+        body: {
+          facility_id: session.facilityId,
+          vehicle_code: vehicleCode,
+          vehicle_name: vehicleName,
+          plate_number: optionalString(
+            body.plateNumber,
+            "ナンバー",
+            1,
+            50
+          ),
+          passenger_capacity: requireInteger(
+            body.passengerCapacity ?? 4,
+            "通常座席数",
+            0,
+            100
+          ),
+          wheelchair_capacity: requireInteger(
+            body.wheelchairCapacity ?? 0,
+            "車いす定員",
+            0,
+            20
+          ),
+          has_lift: optionalBoolean(
+            body.hasLift,
+            false,
+            "リフト装備"
+          ),
+          vehicle_status: optionalEnum(
+            body.vehicleStatus,
+            "車両状態",
+            ["available", "maintenance", "unavailable"],
+            "available"
+          ),
+          is_active: optionalBoolean(body.isActive, true, "有効状態"),
+        },
+        prefer: "return=representation",
+      });
+      const vehicle = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "create_vehicle",
+        entityType: "vehicle",
+        entityId: vehicle?.id || null,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: { vehicle: publicVehicle(vehicle) },
+      };
+    }
+  );
+}
+
+async function handleVehicleUpdate(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  vehicleId
+) {
+  const session = await requireSession(request, env, ["admin"]);
+  await enforceRateLimit(request, env, "vehicle-update", session);
+  const body = await readJsonObject(request);
+  const expectedUpdatedAt = requireIsoTimestamp(
+    body.expectedUpdatedAt,
+    "更新前日時"
+  );
+  const changes = {};
+  if (body.vehicleName !== undefined) {
+    changes.vehicle_name = requireString(
+      body.vehicleName,
+      "車両名",
+      1,
+      100
+    );
+  }
+  if (body.plateNumber !== undefined) {
+    changes.plate_number = optionalString(
+      body.plateNumber,
+      "ナンバー",
+      1,
+      50
+    );
+  }
+  if (body.passengerCapacity !== undefined) {
+    changes.passenger_capacity = requireInteger(
+      body.passengerCapacity,
+      "通常座席数",
+      0,
+      100
+    );
+  }
+  if (body.wheelchairCapacity !== undefined) {
+    changes.wheelchair_capacity = requireInteger(
+      body.wheelchairCapacity,
+      "車いす定員",
+      0,
+      20
+    );
+  }
+  if (body.hasLift !== undefined) {
+    changes.has_lift = requireBoolean(body.hasLift, "リフト装備");
+  }
+  if (body.vehicleStatus !== undefined) {
+    changes.vehicle_status = requireEnum(
+      body.vehicleStatus,
+      "車両状態",
+      ["available", "maintenance", "unavailable"]
+    );
+  }
+  if (body.isActive !== undefined) {
+    changes.is_active = requireBoolean(body.isActive, "有効状態");
+  }
+  assertHasChanges(changes);
+  const params = new URLSearchParams();
+  params.set("id", `eq.${vehicleId}`);
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("updated_at", `eq.${expectedUpdatedAt}`);
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_vehicles?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: changes,
+      prefer: "return=representation",
+    }
+  );
+  const vehicle = Array.isArray(rows) ? rows[0] : null;
+  if (!vehicle) {
+    throw staleUpdateError();
+  }
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_vehicle",
+    entityType: "vehicle",
+    entityId: vehicleId,
+    requestId,
+    request,
+  });
+  return successResponse(
+    { vehicle: publicVehicle(vehicle) },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRiderList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "rider-list", session);
+  const url = new URL(request.url);
+  const query = optionalSearchQuery(url.searchParams.get("query"));
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,rider_code,full_name,full_name_kana,phone,phone_normalized,transport_support_level,uses_wheelchair,requires_handover,transport_notes,emergency_contact_name,emergency_contact_phone,is_active,created_at,updated_at"
+  );
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("order", "full_name.asc");
+  params.set("limit", String(getQueryLimit(request, 50, 200)));
+
+  if (query) {
+    const phone = normalizeJapanesePhone(query);
+    if (phone) {
+      params.set("phone_normalized", `eq.${phone}`);
+    } else {
+      const safe = escapePostgrestSearch(query);
+      params.set(
+        "or",
+        `(full_name.ilike.*${safe}*,full_name_kana.ilike.*${safe}*,rider_code.ilike.*${safe}*)`
+      );
+    }
+  }
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_riders?${params.toString()}`
+  );
+  return successResponse(
+    {
+      riders: (rows || []).map(publicRider),
+      count: Array.isArray(rows) ? rows.length : 0,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRiderDetail(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  riderId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "rider-detail", session);
+  const rider = await findRiderById(env, session.facilityId, riderId);
+
+  const locationParams = new URLSearchParams();
+  locationParams.set(
+    "select",
+    "id,location_type,location_name,postal_code,address_line1,address_line2,access_notes,is_default_pickup,is_default_dropoff,is_active,updated_at"
+  );
+  locationParams.set("facility_id", `eq.${session.facilityId}`);
+  locationParams.set("rider_id", `eq.${riderId}`);
+  locationParams.set("is_active", "eq.true");
+  locationParams.set("order", "location_name.asc");
+
+  const linkParams = new URLSearchParams();
+  linkParams.set(
+    "select",
+    "id,guardian_id,is_primary,can_view_schedule,can_request_change,approved_at"
+  );
+  linkParams.set("facility_id", `eq.${session.facilityId}`);
+  linkParams.set("rider_id", `eq.${riderId}`);
+
+  const [locations, links] = await Promise.all([
+    supabaseRequest(
+      env,
+      `shuttle_locations?${locationParams.toString()}`
+    ),
+    supabaseRequest(
+      env,
+      `shuttle_guardian_rider_links?${linkParams.toString()}`
+    ),
+  ]);
+
+  let guardians = [];
+  if (Array.isArray(links) && links.length > 0) {
+    const guardianIds = links.map((link) => link.guardian_id);
+    const guardianParams = new URLSearchParams();
+    guardianParams.set(
+      "select",
+      "id,guardian_code,full_name,relationship,phone,link_status,is_active,updated_at"
+    );
+    guardianParams.set("facility_id", `eq.${session.facilityId}`);
+    guardianParams.set("id", `in.(${guardianIds.join(",")})`);
+    const guardianRows = await supabaseRequest(
+      env,
+      `shuttle_guardians?${guardianParams.toString()}`
+    );
+    const linkByGuardian = new Map(
+      links.map((link) => [link.guardian_id, link])
+    );
+    guardians = (guardianRows || []).map((row) => ({
+      ...publicGuardian(row),
+      link: publicGuardianLink(linkByGuardian.get(row.id)),
+    }));
+  }
+
+  return successResponse(
+    {
+      rider: publicRider(rider),
+      locations: (locations || []).map(publicLocation),
+      guardians,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRiderCreate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "rider-create", session);
+  const body = await readJsonObject(request);
+  const riderCode = requireCode(body.riderCode, "利用者番号");
+  const fullName = requireString(body.fullName, "利用者氏名", 1, 100);
+  const fullNameKana = optionalString(
+    body.fullNameKana,
+    "ふりがな",
+    1,
+    100
+  );
+  const phone = optionalPhone(body.phone, "電話番号");
+  const transportSupportLevel = optionalEnum(
+    body.transportSupportLevel,
+    "移動支援区分",
+    [
+      "independent",
+      "supervision",
+      "partial_assist",
+      "full_assist",
+      "wheelchair",
+    ],
+    "independent"
+  );
+  const usesWheelchair = optionalBoolean(
+    body.usesWheelchair,
+    transportSupportLevel === "wheelchair",
+    "車いす利用"
+  );
+  const requiresHandover = optionalBoolean(
+    body.requiresHandover,
+    false,
+    "引渡し確認"
+  );
+  const transportNotes = optionalString(
+    body.transportNotes,
+    "送迎上の注意",
+    1,
+    1000
+  );
+  const emergencyContactName = optionalString(
+    body.emergencyContactName,
+    "緊急連絡先氏名",
+    1,
+    100
+  );
+  const emergencyContactPhone = optionalPhone(
+    body.emergencyContactPhone,
+    "緊急連絡先電話番号"
+  );
+
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "rider-create",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      await assertRiderNotDuplicated(
+        env,
+        session.facilityId,
+        fullName,
+        phone
+      );
+      const rows = await supabaseRequest(env, "shuttle_riders", {
+        method: "POST",
+        body: {
+          facility_id: session.facilityId,
+          rider_code: riderCode,
+          full_name: fullName,
+          full_name_kana: fullNameKana,
+          phone,
+          transport_support_level: transportSupportLevel,
+          uses_wheelchair: usesWheelchair,
+          requires_handover: requiresHandover,
+          transport_notes: transportNotes,
+          emergency_contact_name: emergencyContactName,
+          emergency_contact_phone: emergencyContactPhone,
+          is_active: optionalBoolean(body.isActive, true, "有効状態"),
+        },
+        prefer: "return=representation",
+      });
+      const rider = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "create_rider",
+        entityType: "rider",
+        entityId: rider?.id || null,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: { rider: publicRider(rider) },
+      };
+    }
+  );
+}
+
+async function handleRiderUpdate(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  riderId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "rider-update", session);
+  const body = await readJsonObject(request);
+  const expectedUpdatedAt = requireIsoTimestamp(
+    body.expectedUpdatedAt,
+    "更新前日時"
+  );
+  const changes = {};
+  if (body.fullName !== undefined) {
+    changes.full_name = requireString(
+      body.fullName,
+      "利用者氏名",
+      1,
+      100
+    );
+  }
+  if (body.fullNameKana !== undefined) {
+    changes.full_name_kana = optionalString(
+      body.fullNameKana,
+      "ふりがな",
+      1,
+      100
+    );
+  }
+  if (body.phone !== undefined) {
+    changes.phone = optionalPhone(body.phone, "電話番号");
+  }
+  if (body.transportSupportLevel !== undefined) {
+    changes.transport_support_level = requireEnum(
+      body.transportSupportLevel,
+      "移動支援区分",
+      [
+        "independent",
+        "supervision",
+        "partial_assist",
+        "full_assist",
+        "wheelchair",
+      ]
+    );
+  }
+  if (body.usesWheelchair !== undefined) {
+    changes.uses_wheelchair = requireBoolean(
+      body.usesWheelchair,
+      "車いす利用"
+    );
+  }
+  if (body.requiresHandover !== undefined) {
+    changes.requires_handover = requireBoolean(
+      body.requiresHandover,
+      "引渡し確認"
+    );
+  }
+  if (body.transportNotes !== undefined) {
+    changes.transport_notes = optionalString(
+      body.transportNotes,
+      "送迎上の注意",
+      1,
+      1000
+    );
+  }
+  if (body.emergencyContactName !== undefined) {
+    changes.emergency_contact_name = optionalString(
+      body.emergencyContactName,
+      "緊急連絡先氏名",
+      1,
+      100
+    );
+  }
+  if (body.emergencyContactPhone !== undefined) {
+    changes.emergency_contact_phone = optionalPhone(
+      body.emergencyContactPhone,
+      "緊急連絡先電話番号"
+    );
+  }
+  if (body.isActive !== undefined) {
+    changes.is_active = requireBoolean(body.isActive, "有効状態");
+  }
+  assertHasChanges(changes);
+
+  const params = new URLSearchParams();
+  params.set("id", `eq.${riderId}`);
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("updated_at", `eq.${expectedUpdatedAt}`);
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_riders?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: changes,
+      prefer: "return=representation",
+    }
+  );
+  const rider = Array.isArray(rows) ? rows[0] : null;
+  if (!rider) {
+    throw staleUpdateError();
+  }
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_rider",
+    entityType: "rider",
+    entityId: riderId,
+    requestId,
+    request,
+  });
+  return successResponse(
+    { rider: publicRider(rider) },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleGuardianList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "guardian-list", session);
+  const url = new URL(request.url);
+  const query = optionalSearchQuery(url.searchParams.get("query"));
+  const riderId = optionalUuid(
+    url.searchParams.get("riderId"),
+    "利用者ID"
+  );
+  let guardianIds = null;
+
+  if (riderId) {
+    const linkParams = new URLSearchParams();
+    linkParams.set("select", "guardian_id");
+    linkParams.set("facility_id", `eq.${session.facilityId}`);
+    linkParams.set("rider_id", `eq.${riderId}`);
+    const links = await supabaseRequest(
+      env,
+      `shuttle_guardian_rider_links?${linkParams.toString()}`
+    );
+    guardianIds = (links || []).map((link) => link.guardian_id);
+    if (guardianIds.length === 0) {
+      return successResponse(
+        { guardians: [], count: 0 },
+        200,
+        corsOrigin,
+        requestId
+      );
+    }
+  }
+
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,guardian_code,full_name,relationship,phone,phone_normalized,line_user_id,link_status,notification_preferences,is_active,created_at,updated_at"
+  );
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("order", "full_name.asc");
+  params.set("limit", String(getQueryLimit(request, 50, 200)));
+  if (guardianIds) {
+    params.set("id", `in.(${guardianIds.join(",")})`);
+  }
+  if (query) {
+    const phone = normalizeJapanesePhone(query);
+    if (phone) {
+      params.set("phone_normalized", `eq.${phone}`);
+    } else {
+      const safe = escapePostgrestSearch(query);
+      params.set(
+        "or",
+        `(full_name.ilike.*${safe}*,guardian_code.ilike.*${safe}*)`
+      );
+    }
+  }
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${params.toString()}`
+  );
+  return successResponse(
+    {
+      guardians: (rows || []).map(publicGuardian),
+      count: Array.isArray(rows) ? rows.length : 0,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleGuardianCreate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "guardian-create", session);
+  const body = await readJsonObject(request);
+  const guardianCode = requireCode(body.guardianCode, "家族番号");
+  const fullName = requireString(body.fullName, "家族氏名", 1, 100);
+  const phone = requirePhone(body.phone, "電話番号");
+  const relationship = optionalString(
+    body.relationship,
+    "続柄",
+    1,
+    50
+  );
+
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "guardian-create",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      await assertGuardianNotDuplicated(
+        env,
+        session.facilityId,
+        fullName,
+        phone
+      );
+      const rows = await supabaseRequest(env, "shuttle_guardians", {
+        method: "POST",
+        body: {
+          facility_id: session.facilityId,
+          guardian_code: guardianCode,
+          full_name: fullName,
+          relationship,
+          phone,
+          link_status: optionalEnum(
+            body.linkStatus,
+            "LINE連携状態",
+            ["pending", "approved", "rejected", "suspended"],
+            "pending"
+          ),
+          notification_preferences:
+            requireOptionalPlainObject(
+              body.notificationPreferences,
+              "通知設定"
+            ),
+          is_active: optionalBoolean(body.isActive, true, "有効状態"),
+        },
+        prefer: "return=representation",
+      });
+      const guardian = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "create_guardian",
+        entityType: "guardian",
+        entityId: guardian?.id || null,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: { guardian: publicGuardian(guardian) },
+      };
+    }
+  );
+}
+
+async function handleGuardianUpdate(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  guardianId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "guardian-update", session);
+  const body = await readJsonObject(request);
+  const expectedUpdatedAt = requireIsoTimestamp(
+    body.expectedUpdatedAt,
+    "更新前日時"
+  );
+  const changes = {};
+  if (body.fullName !== undefined) {
+    changes.full_name = requireString(body.fullName, "家族氏名", 1, 100);
+  }
+  if (body.relationship !== undefined) {
+    changes.relationship = optionalString(
+      body.relationship,
+      "続柄",
+      1,
+      50
+    );
+  }
+  if (body.phone !== undefined) {
+    changes.phone = requirePhone(body.phone, "電話番号");
+  }
+  if (body.linkStatus !== undefined) {
+    changes.link_status = requireEnum(
+      body.linkStatus,
+      "LINE連携状態",
+      ["pending", "approved", "rejected", "suspended"]
+    );
+  }
+  if (body.notificationPreferences !== undefined) {
+    changes.notification_preferences = requirePlainObject(
+      body.notificationPreferences,
+      "通知設定"
+    );
+  }
+  if (body.isActive !== undefined) {
+    changes.is_active = requireBoolean(body.isActive, "有効状態");
+  }
+  assertHasChanges(changes);
+  const params = new URLSearchParams();
+  params.set("id", `eq.${guardianId}`);
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("updated_at", `eq.${expectedUpdatedAt}`);
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: changes,
+      prefer: "return=representation",
+    }
+  );
+  const guardian = Array.isArray(rows) ? rows[0] : null;
+  if (!guardian) {
+    throw staleUpdateError();
+  }
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_guardian",
+    entityType: "guardian",
+    entityId: guardianId,
+    requestId,
+    request,
+  });
+  return successResponse(
+    { guardian: publicGuardian(guardian) },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleGuardianRiderLinkCreate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "guardian-link-create", session);
+  const body = await readJsonObject(request);
+  const guardianId = requireUuid(body.guardianId, "家族ID");
+  const riderId = requireUuid(body.riderId, "利用者ID");
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "guardian-link-create",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      const rows = await supabaseRequest(
+        env,
+        "shuttle_guardian_rider_links",
+        {
+          method: "POST",
+          body: {
+            facility_id: session.facilityId,
+            guardian_id: guardianId,
+            rider_id: riderId,
+            is_primary: optionalBoolean(
+              body.isPrimary,
+              false,
+              "主連絡先"
+            ),
+            can_view_schedule: optionalBoolean(
+              body.canViewSchedule,
+              true,
+              "予定閲覧"
+            ),
+            can_request_change: optionalBoolean(
+              body.canRequestChange,
+              true,
+              "変更依頼"
+            ),
+            approved_at: new Date().toISOString(),
+            approved_by_staff_id: session.actorId,
+          },
+          prefer: "return=representation",
+        }
+      );
+      const link = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "link_guardian_rider",
+        entityType: "guardian_rider_link",
+        entityId: link?.id || null,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: { link: publicGuardianLink(link) },
+      };
+    }
+  );
+}
+
+async function handleLocationList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "location-list", session);
+  const url = new URL(request.url);
+  const riderId = optionalUuid(
+    url.searchParams.get("riderId"),
+    "利用者ID"
+  );
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,rider_id,location_type,location_name,postal_code,address_line1,address_line2,latitude,longitude,access_notes,is_default_pickup,is_default_dropoff,is_active,created_at,updated_at"
+  );
+  params.set("facility_id", `eq.${session.facilityId}`);
+  if (riderId) {
+    params.set("rider_id", `eq.${riderId}`);
+  }
+  params.set("is_active", "eq.true");
+  params.set("order", "location_type.asc,location_name.asc");
+  params.set("limit", String(getQueryLimit(request, 100, 300)));
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_locations?${params.toString()}`
+  );
+  return successResponse(
+    {
+      locations: (rows || []).map(publicLocation),
+      count: Array.isArray(rows) ? rows.length : 0,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleLocationCreate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "location-create", session);
+  const body = await readJsonObject(request);
+  const locationType = requireEnum(
+    body.locationType,
+    "場所区分",
+    ["home", "school", "facility", "other"]
+  );
+  const riderId = optionalUuid(body.riderId, "利用者ID");
+  if (locationType === "facility" && riderId) {
+    throw new AppError(
+      400,
+      "FACILITY_LOCATION_OWNER",
+      "施設共通の場所には利用者を指定できません。"
+    );
+  }
+  if (locationType !== "facility" && !riderId) {
+    throw new AppError(
+      400,
+      "RIDER_REQUIRED",
+      "利用者の乗降場所には利用者を指定してください。"
+    );
+  }
+  const locationName = requireString(
+    body.locationName,
+    "場所名",
+    1,
+    100
+  );
+  const addressLine1 = requireString(
+    body.addressLine1,
+    "住所",
+    1,
+    250
+  );
+
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "location-create",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      const rows = await supabaseRequest(env, "shuttle_locations", {
+        method: "POST",
+        body: {
+          facility_id: session.facilityId,
+          rider_id: riderId,
+          location_type: locationType,
+          location_name: locationName,
+          postal_code: optionalString(
+            body.postalCode,
+            "郵便番号",
+            1,
+            20
+          ),
+          address_line1: addressLine1,
+          address_line2: optionalString(
+            body.addressLine2,
+            "建物名等",
+            1,
+            250
+          ),
+          latitude: optionalNumber(
+            body.latitude,
+            "緯度",
+            -90,
+            90
+          ),
+          longitude: optionalNumber(
+            body.longitude,
+            "経度",
+            -180,
+            180
+          ),
+          access_notes: optionalString(
+            body.accessNotes,
+            "乗降時の注意",
+            1,
+            1000
+          ),
+          is_default_pickup: optionalBoolean(
+            body.isDefaultPickup,
+            false,
+            "標準乗車場所"
+          ),
+          is_default_dropoff: optionalBoolean(
+            body.isDefaultDropoff,
+            false,
+            "標準降車場所"
+          ),
+          is_active: optionalBoolean(body.isActive, true, "有効状態"),
+        },
+        prefer: "return=representation",
+      });
+      const location = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "create_location",
+        entityType: "location",
+        entityId: location?.id || null,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: { location: publicLocation(location) },
+      };
+    }
+  );
+}
+
+async function handleLocationUpdate(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  locationId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "location-update", session);
+  const body = await readJsonObject(request);
+  const expectedUpdatedAt = requireIsoTimestamp(
+    body.expectedUpdatedAt,
+    "更新前日時"
+  );
+  const changes = {};
+  const mappings = [
+    ["locationName", "location_name", "場所名", 1, 100],
+    ["postalCode", "postal_code", "郵便番号", 1, 20],
+    ["addressLine1", "address_line1", "住所", 1, 250],
+    ["addressLine2", "address_line2", "建物名等", 1, 250],
+    ["accessNotes", "access_notes", "乗降時の注意", 1, 1000],
+  ];
+  for (const [input, column, label, min, max] of mappings) {
+    if (body[input] !== undefined) {
+      changes[column] =
+        input === "locationName" || input === "addressLine1"
+          ? requireString(body[input], label, min, max)
+          : optionalString(body[input], label, min, max);
+    }
+  }
+  if (body.latitude !== undefined) {
+    changes.latitude = optionalNumber(
+      body.latitude,
+      "緯度",
+      -90,
+      90
+    );
+  }
+  if (body.longitude !== undefined) {
+    changes.longitude = optionalNumber(
+      body.longitude,
+      "経度",
+      -180,
+      180
+    );
+  }
+  if (body.isDefaultPickup !== undefined) {
+    changes.is_default_pickup = requireBoolean(
+      body.isDefaultPickup,
+      "標準乗車場所"
+    );
+  }
+  if (body.isDefaultDropoff !== undefined) {
+    changes.is_default_dropoff = requireBoolean(
+      body.isDefaultDropoff,
+      "標準降車場所"
+    );
+  }
+  if (body.isActive !== undefined) {
+    changes.is_active = requireBoolean(body.isActive, "有効状態");
+  }
+  assertHasChanges(changes);
+  const params = new URLSearchParams();
+  params.set("id", `eq.${locationId}`);
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("updated_at", `eq.${expectedUpdatedAt}`);
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_locations?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: changes,
+      prefer: "return=representation",
+    }
+  );
+  const location = Array.isArray(rows) ? rows[0] : null;
+  if (!location) {
+    throw staleUpdateError();
+  }
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_location",
+    entityType: "location",
+    entityId: locationId,
+    requestId,
+    request,
+  });
+  return successResponse(
+    { location: publicLocation(location) },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRegularScheduleList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "schedule-list", session);
+  const url = new URL(request.url);
+  const riderId = optionalUuid(
+    url.searchParams.get("riderId"),
+    "利用者ID"
+  );
+  const dayOfWeekValue = url.searchParams.get("dayOfWeek");
+  const dayOfWeek =
+    dayOfWeekValue === null
+      ? null
+      : requireInteger(Number(dayOfWeekValue), "曜日", 0, 6);
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,rider_id,day_of_week,service_type,route_group_code,pickup_location_id,dropoff_location_id,scheduled_pickup_time,scheduled_dropoff_time,effective_from,effective_to,notes,is_active,created_at,updated_at"
+  );
+  params.set("facility_id", `eq.${session.facilityId}`);
+  if (riderId) {
+    params.set("rider_id", `eq.${riderId}`);
+  }
+  if (dayOfWeek !== null) {
+    params.set("day_of_week", `eq.${dayOfWeek}`);
+  }
+  params.set("order", "day_of_week.asc,scheduled_pickup_time.asc");
+  params.set("limit", String(getQueryLimit(request, 100, 500)));
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_regular_schedules?${params.toString()}`
+  );
+  return successResponse(
+    {
+      regularSchedules: (rows || []).map(publicRegularSchedule),
+      count: Array.isArray(rows) ? rows.length : 0,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRegularScheduleCreate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "schedule-create", session);
+  const body = await readJsonObject(request);
+  const payload = {
+    facility_id: session.facilityId,
+    rider_id: requireUuid(body.riderId, "利用者ID"),
+    day_of_week: requireInteger(body.dayOfWeek, "曜日", 0, 6),
+    service_type: requireEnum(
+      body.serviceType,
+      "送迎区分",
+      ["pickup", "dropoff", "transfer"]
+    ),
+    route_group_code: requireCode(
+      body.routeGroupCode || "A",
+      "ルートコード",
+      30
+    ),
+    pickup_location_id: requireUuid(
+      body.pickupLocationId,
+      "乗車場所ID"
+    ),
+    dropoff_location_id: requireUuid(
+      body.dropoffLocationId,
+      "降車場所ID"
+    ),
+    scheduled_pickup_time: requireTime(
+      body.scheduledPickupTime,
+      "乗車予定時刻"
+    ),
+    scheduled_dropoff_time: requireTime(
+      body.scheduledDropoffTime,
+      "降車予定時刻"
+    ),
+    effective_from: requireDate(body.effectiveFrom, "適用開始日"),
+    effective_to: optionalDate(body.effectiveTo, "適用終了日"),
+    notes: optionalString(body.notes, "備考", 1, 1000),
+    is_active: optionalBoolean(body.isActive, true, "有効状態"),
+  };
+  await assertRegularScheduleRules(
+    env,
+    session.facilityId,
+    payload.scheduled_pickup_time,
+    payload.scheduled_dropoff_time,
+    payload.effective_from,
+    payload.effective_to
+  );
+
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "schedule-create",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      const rows = await supabaseRequest(
+        env,
+        "shuttle_regular_schedules",
+        {
+          method: "POST",
+          body: payload,
+          prefer: "return=representation",
+        }
+      );
+      const schedule = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "create_regular_schedule",
+        entityType: "regular_schedule",
+        entityId: schedule?.id || null,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: {
+          regularSchedule: publicRegularSchedule(schedule),
+        },
+      };
+    }
+  );
+}
+
+async function handleRegularScheduleUpdate(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  scheduleId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "schedule-update", session);
+  const body = await readJsonObject(request);
+  const expectedUpdatedAt = requireIsoTimestamp(
+    body.expectedUpdatedAt,
+    "更新前日時"
+  );
+  const changes = {};
+  const uuidFields = [
+    ["pickupLocationId", "pickup_location_id", "乗車場所ID"],
+    ["dropoffLocationId", "dropoff_location_id", "降車場所ID"],
+  ];
+  for (const [input, column, label] of uuidFields) {
+    if (body[input] !== undefined) {
+      changes[column] = requireUuid(body[input], label);
+    }
+  }
+  if (body.dayOfWeek !== undefined) {
+    changes.day_of_week = requireInteger(body.dayOfWeek, "曜日", 0, 6);
+  }
+  if (body.serviceType !== undefined) {
+    changes.service_type = requireEnum(
+      body.serviceType,
+      "送迎区分",
+      ["pickup", "dropoff", "transfer"]
+    );
+  }
+  if (body.routeGroupCode !== undefined) {
+    changes.route_group_code = requireCode(
+      body.routeGroupCode,
+      "ルートコード",
+      30
+    );
+  }
+  if (body.scheduledPickupTime !== undefined) {
+    changes.scheduled_pickup_time = requireTime(
+      body.scheduledPickupTime,
+      "乗車予定時刻"
+    );
+  }
+  if (body.scheduledDropoffTime !== undefined) {
+    changes.scheduled_dropoff_time = requireTime(
+      body.scheduledDropoffTime,
+      "降車予定時刻"
+    );
+  }
+  if (body.effectiveFrom !== undefined) {
+    changes.effective_from = requireDate(
+      body.effectiveFrom,
+      "適用開始日"
+    );
+  }
+  if (body.effectiveTo !== undefined) {
+    changes.effective_to = optionalDate(
+      body.effectiveTo,
+      "適用終了日"
+    );
+  }
+  if (body.notes !== undefined) {
+    changes.notes = optionalString(body.notes, "備考", 1, 1000);
+  }
+  if (body.isActive !== undefined) {
+    changes.is_active = requireBoolean(body.isActive, "有効状態");
+  }
+  assertHasChanges(changes);
+
+  const currentParams = new URLSearchParams();
+  currentParams.set(
+    "select",
+    "scheduled_pickup_time,scheduled_dropoff_time,effective_from,effective_to"
+  );
+  currentParams.set("id", `eq.${scheduleId}`);
+  currentParams.set("facility_id", `eq.${session.facilityId}`);
+  currentParams.set("limit", "1");
+  const currentRows = await supabaseRequest(
+    env,
+    `shuttle_regular_schedules?${currentParams.toString()}`
+  );
+  const current = Array.isArray(currentRows) ? currentRows[0] : null;
+  if (!current) {
+    throw new AppError(
+      404,
+      "REGULAR_SCHEDULE_NOT_FOUND",
+      "対象の定期送迎予定が見つかりません。"
+    );
+  }
+  await assertRegularScheduleRules(
+    env,
+    session.facilityId,
+    changes.scheduled_pickup_time ??
+      current.scheduled_pickup_time,
+    changes.scheduled_dropoff_time ??
+      current.scheduled_dropoff_time,
+    changes.effective_from ?? current.effective_from,
+    changes.effective_to !== undefined
+      ? changes.effective_to
+      : current.effective_to
+  );
+
+  const params = new URLSearchParams();
+  params.set("id", `eq.${scheduleId}`);
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("updated_at", `eq.${expectedUpdatedAt}`);
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_regular_schedules?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: changes,
+      prefer: "return=representation",
+    }
+  );
+  const schedule = Array.isArray(rows) ? rows[0] : null;
+  if (!schedule) {
+    throw staleUpdateError();
+  }
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_regular_schedule",
+    entityType: "regular_schedule",
+    entityId: scheduleId,
+    requestId,
+    request,
+  });
+  return successResponse(
+    { regularSchedule: publicRegularSchedule(schedule) },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRunList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "run-list", session);
+  const url = new URL(request.url);
+  const serviceDate = requireDate(
+    url.searchParams.get("serviceDate"),
+    "送迎日"
+  );
+  const runs = await loadRunsForDate(
+    env,
+    session.facilityId,
+    serviceDate,
+    session
+  );
+  return successResponse(
+    {
+      serviceDate,
+      runs,
+      count: runs.length,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRunDetail(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  runId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "run-detail", session);
+  await assertRunAccess(env, session, runId);
+  const run = await loadRunDetail(
+    env,
+    session.facilityId,
+    runId
+  );
+  return successResponse(
+    { run },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRunGenerate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+  ]);
+  await enforceRateLimit(request, env, "run-generate", session);
+  const actorStaffId = requireStaffActor(session);
+  const body = await readJsonObject(request);
+  const serviceDate = requireDate(body.serviceDate, "送迎日");
+  assertNotPastJstDate(serviceDate, "過去日の送迎便は生成できません。");
+
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "run-generate",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      const generated = await supabaseRpc(
+        env,
+        "shuttle_generate_daily_runs",
+        {
+          p_facility_id: session.facilityId,
+          p_service_date: serviceDate,
+          p_actor_staff_id: actorStaffId,
+        }
+      );
+      const runs = await loadRunsForDate(
+        env,
+        session.facilityId,
+        serviceDate,
+        session
+      );
+      return {
+        status: 200,
+        payload: {
+          generated,
+          serviceDate,
+          runs,
+        },
+      };
+    }
+  );
+}
+
+async function handleRunUpdate(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  runId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+  ]);
+  await enforceRateLimit(request, env, "run-update", session);
+  const body = await readJsonObject(request);
+  const expectedVersion = requireInteger(
+    body.expectedVersion,
+    "更新前バージョン",
+    1,
+    2147483646
+  );
+  const changes = {
+    version: expectedVersion + 1,
+  };
+  if (body.vehicleId !== undefined) {
+    changes.vehicle_id = optionalUuid(body.vehicleId, "車両ID");
+  }
+  if (body.runStatus !== undefined) {
+    changes.run_status = requireEnum(
+      body.runStatus,
+      "運行状態",
+      ["planned", "ready", "in_progress", "completed", "cancelled"]
+    );
+  }
+  if (body.scheduledStartAt !== undefined) {
+    changes.scheduled_start_at = requireIsoTimestamp(
+      body.scheduledStartAt,
+      "開始予定日時"
+    );
+  }
+  if (body.scheduledEndAt !== undefined) {
+    changes.scheduled_end_at = requireIsoTimestamp(
+      body.scheduledEndAt,
+      "終了予定日時"
+    );
+  }
+  if (body.notes !== undefined) {
+    changes.notes = optionalString(body.notes, "備考", 1, 2000);
+  }
+  if (Object.keys(changes).length === 1) {
+    throw new AppError(
+      400,
+      "NO_CHANGES",
+      "変更する内容を入力してください。"
+    );
+  }
+  const params = new URLSearchParams();
+  params.set("id", `eq.${runId}`);
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("version", `eq.${expectedVersion}`);
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_runs?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: changes,
+      prefer: "return=representation",
+    }
+  );
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row) {
+    throw staleUpdateError();
+  }
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_run",
+    entityType: "run",
+    entityId: runId,
+    requestId,
+    request,
+  });
+  const run = await loadRunDetail(
+    env,
+    session.facilityId,
+    runId
+  );
+  return successResponse(
+    { run },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRunStaffAssign(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  runId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+  ]);
+  await enforceRateLimit(request, env, "run-staff-assign", session);
+  const body = await readJsonObject(request);
+  const staffId = requireUuid(body.staffId, "スタッフID");
+  const duty = requireEnum(
+    body.duty,
+    "担当区分",
+    ["driver", "attendant"]
+  );
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "run-staff-assign",
+    { runId, ...body },
+    corsOrigin,
+    requestId,
+    async () => {
+      const rows = await supabaseRequest(env, "shuttle_run_staff", {
+        method: "POST",
+        body: {
+          facility_id: session.facilityId,
+          run_id: runId,
+          staff_id: staffId,
+          duty,
+        },
+        prefer: "return=representation",
+      });
+      const assignment = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "assign_run_staff",
+        entityType: "run",
+        entityId: runId,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: {
+          assignment: {
+            runId: assignment?.run_id || runId,
+            staffId: assignment?.staff_id || staffId,
+            duty: assignment?.duty || duty,
+          },
+        },
+      };
+    }
+  );
+}
+
+async function handleRunStaffRemove(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  runId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+  ]);
+  await enforceRateLimit(request, env, "run-staff-remove", session);
+  const body = await readJsonObject(request);
+  const staffId = requireUuid(body.staffId, "スタッフID");
+  const duty = requireEnum(
+    body.duty,
+    "担当区分",
+    ["driver", "attendant"]
+  );
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "run-staff-remove",
+    { runId, ...body },
+    corsOrigin,
+    requestId,
+    async () => {
+      const params = new URLSearchParams();
+      params.set("facility_id", `eq.${session.facilityId}`);
+      params.set("run_id", `eq.${runId}`);
+      params.set("staff_id", `eq.${staffId}`);
+      params.set("duty", `eq.${duty}`);
+      const rows = await supabaseRequest(
+        env,
+        `shuttle_run_staff?${params.toString()}`,
+        {
+          method: "DELETE",
+          prefer: "return=representation",
+        }
+      );
+      if (!Array.isArray(rows) || rows.length === 0) {
+        throw new AppError(
+          404,
+          "ASSIGNMENT_NOT_FOUND",
+          "解除する担当割当が見つかりません。"
+        );
+      }
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "remove_run_staff",
+        entityType: "run",
+        entityId: runId,
+        requestId,
+        request,
+      });
+      return {
+        status: 200,
+        payload: {
+          removed: true,
+          runId,
+          staffId,
+          duty,
+        },
+      };
+    }
+  );
+}
+
+async function handleRideEvent(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  stopId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+  ]);
+  await enforceRateLimit(request, env, "ride-event", session);
+  const actorStaffId = requireStaffActor(session);
+  const body = await readJsonObject(request);
+  const eventType = requireEnum(
+    body.eventType,
+    "送迎イベント",
+    [
+      "confirm",
+      "en_route",
+      "boarded",
+      "no_show",
+      "arrived",
+      "handed_over",
+      "completed",
+      "cancelled",
+    ]
+  );
+  const idempotencyKey = requireIdempotencyKey(request, body);
+  const result = await supabaseRpc(
+    env,
+    "shuttle_register_ride_event",
+    {
+      p_stop_id: stopId,
+      p_event_type: eventType,
+      p_actor_staff_id: actorStaffId,
+      p_idempotency_key: idempotencyKey,
+      p_event_at: optionalIsoTimestamp(body.eventAt, "実施日時"),
+      p_notes: optionalString(body.notes, "備考", 1, 1000),
+    }
+  );
+  return successResponse(
+    { rideEvent: result },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleStopStatusCorrection(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  stopId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+  ]);
+  await enforceRateLimit(request, env, "stop-correction", session);
+  const actorStaffId = requireStaffActor(session);
+  const body = await readJsonObject(request);
+  const correctedStatus = requireEnum(
+    body.correctedStatus,
+    "訂正後状態",
+    [
+      "planned",
+      "confirmed",
+      "en_route",
+      "boarded",
+      "no_show",
+      "arrived",
+      "handed_over",
+      "completed",
+      "cancelled",
+    ]
+  );
+  const reason = requireString(body.reason, "訂正理由", 5, 1000);
+  const result = await supabaseRpc(
+    env,
+    "shuttle_admin_correct_stop_status",
+    {
+      p_stop_id: stopId,
+      p_corrected_status: correctedStatus,
+      p_actor_staff_id: actorStaffId,
+      p_reason: reason,
+    }
+  );
+  return successResponse(
+    { correction: result },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleChangeRequestList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+    "guardian",
+  ]);
+  await enforceRateLimit(request, env, "change-request-list", session);
+  const url = new URL(request.url);
+  const status = optionalEnum(
+    url.searchParams.get("status"),
+    "依頼状態",
+    ["pending", "approved", "rejected", "cancelled"],
+    null
+  );
+  const serviceDate = optionalDate(
+    url.searchParams.get("serviceDate"),
+    "送迎日"
+  );
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,rider_id,guardian_id,requested_by_staff_id,service_date,request_type,requested_changes,request_status,reviewed_by_staff_id,reviewed_at,review_notes,created_at,updated_at"
+  );
+  params.set("facility_id", `eq.${session.facilityId}`);
+  if (session.role === "guardian") {
+    params.set("guardian_id", `eq.${session.actorId}`);
+  }
+  if (status) {
+    params.set("request_status", `eq.${status}`);
+  }
+  if (serviceDate) {
+    params.set("service_date", `eq.${serviceDate}`);
+  }
+  params.set("order", "service_date.asc,created_at.asc");
+  params.set("limit", String(getQueryLimit(request, 100, 500)));
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_change_requests?${params.toString()}`
+  );
+  return successResponse(
+    {
+      changeRequests: (rows || []).map(publicChangeRequest),
+      count: Array.isArray(rows) ? rows.length : 0,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleChangeRequestCreate(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+    "guardian",
+  ]);
+  await enforceRateLimit(request, env, "change-request-create", session);
+  const body = await readJsonObject(request);
+  const riderId = requireUuid(body.riderId, "利用者ID");
+  const serviceDate = requireDate(body.serviceDate, "送迎日");
+  assertNotPastJstDate(
+    serviceDate,
+    "過去日の送迎変更は受け付けできません。"
+  );
+  const requestType = requireEnum(
+    body.requestType,
+    "依頼種別",
+    [
+      "absence",
+      "time_change",
+      "location_change",
+      "one_way",
+      "temporary_use",
+      "other",
+    ]
+  );
+  const requestedChanges = validateRequestedChanges(
+    requestType,
+    body.requestedChanges,
+    "変更内容"
+  );
+  const idempotencyKey = requireIdempotencyKey(request, body);
+  const isGuardian = session.role === "guardian";
+  if (isGuardian) {
+    await assertGuardianCanChangeRider(
+      env,
+      session.facilityId,
+      session.actorId,
+      riderId
+    );
+  }
+  const actorStaffId = isGuardian ? null : requireStaffActor(session);
+
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "change-request-create",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      const rows = await supabaseRequest(
+        env,
+        "shuttle_change_requests",
+        {
+          method: "POST",
+          body: {
+            facility_id: session.facilityId,
+            rider_id: riderId,
+            guardian_id: isGuardian ? session.actorId : null,
+            requested_by_staff_id: actorStaffId,
+            service_date: serviceDate,
+            request_type: requestType,
+            requested_changes: requestedChanges,
+            request_status: "pending",
+            idempotency_key: idempotencyKey,
+          },
+          prefer: "return=representation",
+        }
+      );
+      const changeRequest = Array.isArray(rows) ? rows[0] : null;
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "create_change_request",
+        entityType: "change_request",
+        entityId: changeRequest?.id || null,
+        requestId,
+        request,
+      });
+      return {
+        status: 201,
+        payload: {
+          changeRequest: publicChangeRequest(changeRequest),
+        },
+      };
+    }
+  );
+}
+
+async function handleChangeRequestReview(
+  request,
+  env,
+  corsOrigin,
+  requestId,
+  changeRequestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+  ]);
+  await enforceRateLimit(request, env, "change-request-review", session);
+  const actorStaffId = requireStaffActor(session);
+  const body = await readJsonObject(request);
+  const decision = requireEnum(
+    body.decision,
+    "確認結果",
+    ["approved", "rejected"]
+  );
+  const expectedUpdatedAt = requireIsoTimestamp(
+    body.expectedUpdatedAt,
+    "更新前日時"
+  );
+  const reviewNotes = optionalString(
+    body.reviewNotes,
+    "確認メモ",
+    1,
+    1000
+  );
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "change-request-review",
+    { changeRequestId, ...body },
+    corsOrigin,
+    requestId,
+    async () => {
+      const params = new URLSearchParams();
+      params.set("id", `eq.${changeRequestId}`);
+      params.set("facility_id", `eq.${session.facilityId}`);
+      params.set("request_status", "eq.pending");
+      params.set("updated_at", `eq.${expectedUpdatedAt}`);
+      const rows = await supabaseRequest(
+        env,
+        `shuttle_change_requests?${params.toString()}`,
+        {
+          method: "PATCH",
+          body: {
+            request_status: decision,
+            reviewed_by_staff_id: actorStaffId,
+            reviewed_at: new Date().toISOString(),
+            review_notes: reviewNotes,
+          },
+          prefer: "return=representation",
+        }
+      );
+      const changeRequest = Array.isArray(rows) ? rows[0] : null;
+      if (!changeRequest) {
+        throw staleUpdateError();
+      }
+      await writeAuditLog(env, {
+        facilityId: session.facilityId,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "review_change_request",
+        entityType: "change_request",
+        entityId: changeRequestId,
+        requestId,
+        request,
+      });
+      return {
+        status: 200,
+        payload: {
+          changeRequest: publicChangeRequest(changeRequest),
+        },
+      };
+    }
+  );
+}
+
+async function handleTodayDashboard(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "today-dashboard", session);
+  const url = new URL(request.url);
+  const serviceDate = optionalDate(
+    url.searchParams.get("serviceDate"),
+    "送迎日"
+  ) || jstDateString(new Date());
+  const runs = await loadRunsForDate(
+    env,
+    session.facilityId,
+    serviceDate,
+    session
+  );
+
+  const changeParams = new URLSearchParams();
+  changeParams.set("select", "id");
+  changeParams.set("facility_id", `eq.${session.facilityId}`);
+  changeParams.set("request_status", "eq.pending");
+  changeParams.set("service_date", `eq.${serviceDate}`);
+  changeParams.set("limit", "1000");
+
+  const incidentParams = new URLSearchParams();
+  incidentParams.set("select", "id,severity,incident_status");
+  incidentParams.set("facility_id", `eq.${session.facilityId}`);
+  incidentParams.set("incident_status", "in.(open,handling)");
+  incidentParams.set("limit", "1000");
+
+  const [changes, incidents] = await Promise.all([
+    supabaseRequest(
+      env,
+      `shuttle_change_requests?${changeParams.toString()}`
+    ),
+    supabaseRequest(
+      env,
+      `shuttle_incidents?${incidentParams.toString()}`
+    ),
+  ]);
+  const stops = runs.flatMap((run) => run.stops || []);
+  const statusCounts = {};
+  for (const stop of stops) {
+    statusCounts[stop.stopStatus] =
+      (statusCounts[stop.stopStatus] || 0) + 1;
+  }
+  return successResponse(
+    {
+      dashboard: {
+        serviceDate,
+        runCount: runs.length,
+        riderStopCount: stops.length,
+        pendingChangeRequestCount: (changes || []).length,
+        openIncidentCount: (incidents || []).length,
+        emergencyIncidentCount: (incidents || []).filter(
+          (incident) => incident.severity === "emergency"
+        ).length,
+        statusCounts,
+        runs,
+      },
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function loadRunsForDate(
+  env,
+  facilityId,
+  serviceDate,
+  session
+) {
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,service_date,run_code,service_type,route_group_code,scheduled_start_at,scheduled_end_at,actual_start_at,actual_end_at,vehicle_id,run_status,notes,version,created_at,updated_at"
+  );
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("service_date", `eq.${serviceDate}`);
+  params.set("order", "scheduled_start_at.asc,run_code.asc");
+  params.set("limit", "500");
+  let runRows = await supabaseRequest(
+    env,
+    `shuttle_runs?${params.toString()}`
+  );
+  runRows = Array.isArray(runRows) ? runRows : [];
+
+  if (
+    ["driver", "attendant"].includes(session.role) &&
+    session.actorId
+  ) {
+    const assignmentParams = new URLSearchParams();
+    assignmentParams.set("select", "run_id");
+    assignmentParams.set("facility_id", `eq.${facilityId}`);
+    assignmentParams.set("staff_id", `eq.${session.actorId}`);
+    assignmentParams.set("duty", `eq.${session.role}`);
+    const assignedRows = await supabaseRequest(
+      env,
+      `shuttle_run_staff?${assignmentParams.toString()}`
+    );
+    const allowedRunIds = new Set(
+      (assignedRows || []).map((row) => row.run_id)
+    );
+    runRows = runRows.filter((run) => allowedRunIds.has(run.id));
+  }
+  return await hydrateRuns(env, facilityId, runRows);
+}
+
+async function loadRunDetail(env, facilityId, runId) {
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,service_date,run_code,service_type,route_group_code,scheduled_start_at,scheduled_end_at,actual_start_at,actual_end_at,vehicle_id,run_status,notes,version,created_at,updated_at"
+  );
+  params.set("id", `eq.${runId}`);
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_runs?${params.toString()}`
+  );
+  if (!Array.isArray(rows) || !rows[0]) {
+    throw new AppError(
+      404,
+      "RUN_NOT_FOUND",
+      "対象の送迎便が見つかりません。"
+    );
+  }
+  const hydrated = await hydrateRuns(env, facilityId, [rows[0]]);
+  return hydrated[0];
+}
+
+async function hydrateRuns(env, facilityId, runRows) {
+  if (!Array.isArray(runRows) || runRows.length === 0) {
+    return [];
+  }
+  const runIds = runRows.map((row) => row.id);
+  const stopParams = new URLSearchParams();
+  stopParams.set(
+    "select",
+    "id,run_id,rider_id,regular_schedule_id,stop_order,pickup_location_id,dropoff_location_id,planned_pickup_at,planned_dropoff_at,actual_boarded_at,actual_arrived_at,actual_handed_over_at,actual_completed_at,stop_status,seat_units,wheelchair_units,support_summary,handover_notes,version,updated_at"
+  );
+  stopParams.set("facility_id", `eq.${facilityId}`);
+  stopParams.set("run_id", `in.(${runIds.join(",")})`);
+  stopParams.set("order", "stop_order.asc");
+  stopParams.set("limit", "5000");
+
+  const assignmentParams = new URLSearchParams();
+  assignmentParams.set(
+    "select",
+    "run_id,staff_id,duty,created_at"
+  );
+  assignmentParams.set("facility_id", `eq.${facilityId}`);
+  assignmentParams.set("run_id", `in.(${runIds.join(",")})`);
+  assignmentParams.set("limit", "2000");
+
+  const [stopRowsRaw, assignmentRowsRaw] = await Promise.all([
+    supabaseRequest(
+      env,
+      `shuttle_stops?${stopParams.toString()}`
+    ),
+    supabaseRequest(
+      env,
+      `shuttle_run_staff?${assignmentParams.toString()}`
+    ),
+  ]);
+  const stopRows = Array.isArray(stopRowsRaw) ? stopRowsRaw : [];
+  const assignmentRows = Array.isArray(assignmentRowsRaw)
+    ? assignmentRowsRaw
+    : [];
+  const riderIds = [...new Set(stopRows.map((row) => row.rider_id))];
+  const vehicleIds = [
+    ...new Set(
+      runRows.map((row) => row.vehicle_id).filter(Boolean)
+    ),
+  ];
+  const staffIds = [
+    ...new Set(assignmentRows.map((row) => row.staff_id)),
+  ];
+  const pickupLocationIds = stopRows.map(
+    (row) => row.pickup_location_id
+  );
+  const dropoffLocationIds = stopRows.map(
+    (row) => row.dropoff_location_id
+  );
+  const locationIds = [
+    ...new Set([...pickupLocationIds, ...dropoffLocationIds]),
+  ];
+
+  const [riderRows, vehicleRows, staffRows, locationRows] =
+    await Promise.all([
+      fetchRowsByIds(
+        env,
+        "shuttle_riders",
+        facilityId,
+        riderIds,
+        "id,rider_code,full_name,full_name_kana,transport_support_level,uses_wheelchair,requires_handover,transport_notes,is_active,updated_at"
+      ),
+      fetchRowsByIds(
+        env,
+        "shuttle_vehicles",
+        facilityId,
+        vehicleIds,
+        "id,vehicle_code,vehicle_name,plate_number,passenger_capacity,wheelchair_capacity,has_lift,vehicle_status,is_active,updated_at"
+      ),
+      fetchRowsByIds(
+        env,
+        "shuttle_staff",
+        facilityId,
+        staffIds,
+        "id,staff_code,full_name,staff_role,is_active,updated_at"
+      ),
+      fetchRowsByIds(
+        env,
+        "shuttle_locations",
+        facilityId,
+        locationIds,
+        "id,location_type,location_name,address_line1,address_line2,access_notes,is_active,updated_at"
+      ),
+    ]);
+
+  const riders = new Map(riderRows.map((row) => [row.id, row]));
+  const vehicles = new Map(vehicleRows.map((row) => [row.id, row]));
+  const staff = new Map(staffRows.map((row) => [row.id, row]));
+  const locations = new Map(
+    locationRows.map((row) => [row.id, row])
+  );
+  const stopsByRun = new Map();
+  for (const row of stopRows) {
+    const collection = stopsByRun.get(row.run_id) || [];
+    collection.push(
+      publicStop(
+        row,
+        riders.get(row.rider_id),
+        locations.get(row.pickup_location_id),
+        locations.get(row.dropoff_location_id)
+      )
+    );
+    stopsByRun.set(row.run_id, collection);
+  }
+  const assignmentsByRun = new Map();
+  for (const row of assignmentRows) {
+    const collection = assignmentsByRun.get(row.run_id) || [];
+    collection.push({
+      staffId: row.staff_id,
+      duty: row.duty,
+      staff: publicStaff(staff.get(row.staff_id)),
+    });
+    assignmentsByRun.set(row.run_id, collection);
+  }
+  return runRows.map((row) =>
+    publicRun(
+      row,
+      row.vehicle_id ? vehicles.get(row.vehicle_id) : null,
+      assignmentsByRun.get(row.id) || [],
+      stopsByRun.get(row.id) || []
+    )
+  );
+}
+
+async function fetchRowsByIds(
+  env,
+  table,
+  facilityId,
+  ids,
+  select
+) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return [];
+  }
+  const params = new URLSearchParams();
+  params.set("select", select);
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("id", `in.(${ids.join(",")})`);
+  params.set("limit", String(Math.max(ids.length, 1)));
+  const rows = await supabaseRequest(
+    env,
+    `${table}?${params.toString()}`
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function assertRunAccess(env, session, runId) {
+  if (!["driver", "attendant"].includes(session.role)) {
+    return;
+  }
+  if (!session.actorId) {
+    throw new AppError(
+      403,
+      "STAFF_LOGIN_REQUIRED",
+      "スタッフログインが必要です。"
+    );
+  }
+  const params = new URLSearchParams();
+  params.set("select", "run_id");
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("run_id", `eq.${runId}`);
+  params.set("staff_id", `eq.${session.actorId}`);
+  params.set("duty", `eq.${session.role}`);
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_run_staff?${params.toString()}`
+  );
+  if (!Array.isArray(rows) || !rows[0]) {
+    throw new AppError(
+      403,
+      "RUN_NOT_ASSIGNED",
+      "担当していない送迎便は表示できません。"
+    );
+  }
+}
+
+async function findRiderById(env, facilityId, riderId) {
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,rider_code,full_name,full_name_kana,phone,phone_normalized,transport_support_level,uses_wheelchair,requires_handover,transport_notes,emergency_contact_name,emergency_contact_phone,is_active,created_at,updated_at"
+  );
+  params.set("id", `eq.${riderId}`);
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_riders?${params.toString()}`
+  );
+  const rider = Array.isArray(rows) ? rows[0] : null;
+  if (!rider) {
+    throw new AppError(
+      404,
+      "RIDER_NOT_FOUND",
+      "対象の利用者が見つかりません。"
+    );
+  }
+  return rider;
+}
+
+async function assertRiderNotDuplicated(
+  env,
+  facilityId,
+  fullName,
+  phone
+) {
+  if (!phone) {
+    return;
+  }
+  const params = new URLSearchParams();
+  params.set("select", "id,rider_code,full_name");
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("full_name", `eq.${fullName}`);
+  params.set(
+    "phone_normalized",
+    `eq.${normalizeJapanesePhone(phone)}`
+  );
+  params.set("is_active", "eq.true");
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_riders?${params.toString()}`
+  );
+  if (Array.isArray(rows) && rows[0]) {
+    throw new AppError(
+      409,
+      "RIDER_DUPLICATE",
+      "同じ氏名と電話番号の利用者がすでに登録されています。"
+    );
+  }
+}
+
+async function assertGuardianNotDuplicated(
+  env,
+  facilityId,
+  fullName,
+  phone
+) {
+  const params = new URLSearchParams();
+  params.set("select", "id,guardian_code,full_name");
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("full_name", `eq.${fullName}`);
+  params.set(
+    "phone_normalized",
+    `eq.${normalizeJapanesePhone(phone)}`
+  );
+  params.set("is_active", "eq.true");
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${params.toString()}`
+  );
+  if (Array.isArray(rows) && rows[0]) {
+    throw new AppError(
+      409,
+      "GUARDIAN_DUPLICATE",
+      "同じ氏名と電話番号の家族がすでに登録されています。"
+    );
+  }
+}
+
+async function assertGuardianCanChangeRider(
+  env,
+  facilityId,
+  guardianId,
+  riderId
+) {
+  const params = new URLSearchParams();
+  params.set("select", "id");
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("guardian_id", `eq.${guardianId}`);
+  params.set("rider_id", `eq.${riderId}`);
+  params.set("can_request_change", "eq.true");
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_guardian_rider_links?${params.toString()}`
+  );
+  if (!Array.isArray(rows) || !rows[0]) {
+    throw new AppError(
+      403,
+      "RIDER_ACCESS_DENIED",
+      "この利用者の送迎変更を依頼する権限がありません。"
+    );
+  }
+}
+
+async function assertRegularScheduleRules(
+  env,
+  facilityId,
+  pickupTime,
+  dropoffTime,
+  effectiveFrom,
+  effectiveTo
+) {
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "schedule_step_minutes,business_start_time,business_end_time"
+  );
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_settings?${params.toString()}`
+  );
+  const settings = Array.isArray(rows) ? rows[0] : null;
+  if (!settings) {
+    throw new AppError(
+      503,
+      "FACILITY_SETTINGS_MISSING",
+      "事業所の送迎時間設定が見つかりません。"
+    );
+  }
+  const pickupMinutes = timeToMinutes(pickupTime);
+  const dropoffMinutes = timeToMinutes(dropoffTime);
+  const startMinutes = timeToMinutes(settings.business_start_time);
+  const endMinutes = timeToMinutes(settings.business_end_time);
+  const step = Number(settings.schedule_step_minutes);
+
+  if (
+    pickupMinutes < startMinutes ||
+    dropoffMinutes > endMinutes
+  ) {
+    throw new AppError(
+      400,
+      "OUTSIDE_BUSINESS_HOURS",
+      "送迎予定時刻が事業所の運行時間外です。"
+    );
+  }
+  if (
+    pickupMinutes % step !== 0 ||
+    dropoffMinutes % step !== 0
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_TIME_STEP",
+      `送迎予定時刻は${step}分単位で入力してください。`
+    );
+  }
+  if (
+    dropoffMinutes <= pickupMinutes ||
+    dropoffMinutes - pickupMinutes > 360
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_TIME_RANGE",
+      "降車予定時刻は乗車予定時刻より後、6時間以内で指定してください。"
+    );
+  }
+  if (effectiveTo && effectiveTo < effectiveFrom) {
+    throw new AppError(
+      400,
+      "INVALID_EFFECTIVE_RANGE",
+      "適用終了日は適用開始日以降にしてください。"
+    );
+  }
+}
+
+function timeToMinutes(value) {
+  if (typeof value !== "string") {
+    return Number.NaN;
+  }
+  const parts = value.split(":").map(Number);
+  return parts[0] * 60 + parts[1];
+}
+
+async function runIdempotentOperation(
+  request,
+  env,
+  session,
+  scope,
+  requestBody,
+  corsOrigin,
+  requestId,
+  operation
+) {
+  const idempotencyKey = requireIdempotencyKey(request, requestBody);
+  const requestHash = await shortHmac(
+    env.SESSION_SECRET,
+    `${scope}:${stableJson(requestBody)}`
+  );
+  let existing = await fetchIdempotencyRecord(
+    env,
+    session.facilityId,
+    scope,
+    idempotencyKey
+  );
+  if (existing) {
+    return resolveIdempotencyRecord(
+      existing,
+      requestHash,
+      corsOrigin,
+      requestId
+    );
+  }
+
+  try {
+    await supabaseRequest(env, "shuttle_idempotency_keys", {
+      method: "POST",
+      body: {
+        facility_id: session.facilityId,
+        scope,
+        idempotency_key: idempotencyKey,
+        request_hash: requestHash,
+        processing_status: "processing",
+        expires_at: new Date(
+          Date.now() + 24 * 60 * 60 * 1000
+        ).toISOString(),
+      },
+      prefer: "return=minimal",
+    });
+  } catch (error) {
+    if (error instanceof AppError && error.status === 409) {
+      existing = await fetchIdempotencyRecord(
+        env,
+        session.facilityId,
+        scope,
+        idempotencyKey
+      );
+      if (existing) {
+        return resolveIdempotencyRecord(
+          existing,
+          requestHash,
+          corsOrigin,
+          requestId
+        );
+      }
+    }
+    throw error;
+  }
+
+  try {
+    const result = await operation(idempotencyKey);
+    const responseBody = {
+      ok: true,
+      ...result.payload,
+    };
+    await updateIdempotencyRecord(
+      env,
+      session.facilityId,
+      scope,
+      idempotencyKey,
+      {
+        processing_status: "completed",
+        response_status: result.status,
+        response_body: responseBody,
+      }
+    );
+    return successResponse(
+      result.payload,
+      result.status,
+      corsOrigin,
+      requestId
+    );
+  } catch (error) {
+    const appError = normalizeError(error);
+    try {
+      await updateIdempotencyRecord(
+        env,
+        session.facilityId,
+        scope,
+        idempotencyKey,
+        {
+          processing_status: "failed",
+          response_status: appError.status,
+          response_body: {
+            ok: false,
+            error: {
+              code: appError.code,
+              message: appError.message,
+            },
+          },
+        }
+      );
+    } catch (updateError) {
+      logError(
+        normalizeError(updateError),
+        requestId,
+        request
+      );
+    }
+    throw appError;
+  }
+}
+
+async function fetchIdempotencyRecord(
+  env,
+  facilityId,
+  scope,
+  idempotencyKey
+) {
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "request_hash,processing_status,response_status,response_body,expires_at"
+  );
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("scope", `eq.${scope}`);
+  params.set("idempotency_key", `eq.${idempotencyKey}`);
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_idempotency_keys?${params.toString()}`
+  );
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function updateIdempotencyRecord(
+  env,
+  facilityId,
+  scope,
+  idempotencyKey,
+  changes
+) {
+  const params = new URLSearchParams();
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("scope", `eq.${scope}`);
+  params.set("idempotency_key", `eq.${idempotencyKey}`);
+  await supabaseRequest(
+    env,
+    `shuttle_idempotency_keys?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: changes,
+      prefer: "return=minimal",
+    }
+  );
+}
+
+function resolveIdempotencyRecord(
+  record,
+  requestHash,
+  corsOrigin,
+  requestId
+) {
+  if (record.request_hash !== requestHash) {
+    throw new AppError(
+      409,
+      "IDEMPOTENCY_KEY_REUSED",
+      "同じ二重送信防止キーが別の内容で使用されています。画面を更新してください。"
+    );
+  }
+  if (
+    record.processing_status === "completed" &&
+    record.response_body &&
+    Number.isInteger(record.response_status)
+  ) {
+    const response = new Response(
+      JSON.stringify({
+        ...record.response_body,
+        requestId,
+      }),
+      {
+        status: record.response_status,
+        headers: responseHeaders(corsOrigin, requestId),
+      }
+    );
+    response.headers.set("x-idempotent-replay", "true");
+    return response;
+  }
+  if (record.processing_status === "processing") {
+    throw new AppError(
+      409,
+      "REQUEST_IN_PROGRESS",
+      "同じ操作を処理中です。少し待って画面を更新してください。"
+    );
+  }
+  throw new AppError(
+    409,
+    "PREVIOUS_REQUEST_FAILED",
+    "前回の処理は完了していません。画面を更新してから再度お試しください。"
+  );
+}
+
+function stableJson(value) {
+  return JSON.stringify(canonicalizeJson(value));
+}
+
+function canonicalizeJson(value) {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeJson);
+  }
+  if (value && typeof value === "object") {
+    const output = {};
+    for (const key of Object.keys(value).sort()) {
+      output[key] = canonicalizeJson(value[key]);
+    }
+    return output;
+  }
+  return value;
+}
+
+function publicStaff(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    staffCode: row.staff_code,
+    fullName: row.full_name,
+    staffRole: row.staff_role,
+    phone: row.phone ?? null,
+    loginId: row.login_id ?? null,
+    isActive: row.is_active,
+    lastLoginAt: row.last_login_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicVehicle(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    vehicleCode: row.vehicle_code,
+    vehicleName: row.vehicle_name,
+    plateNumber: row.plate_number ?? null,
+    passengerCapacity: row.passenger_capacity,
+    wheelchairCapacity: row.wheelchair_capacity,
+    hasLift: row.has_lift,
+    vehicleStatus: row.vehicle_status,
+    isActive: row.is_active,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicRider(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    riderCode: row.rider_code,
+    fullName: row.full_name,
+    fullNameKana: row.full_name_kana ?? null,
+    phone: row.phone ?? null,
+    transportSupportLevel: row.transport_support_level,
+    usesWheelchair: row.uses_wheelchair,
+    requiresHandover: row.requires_handover,
+    transportNotes: row.transport_notes ?? null,
+    emergencyContactName: row.emergency_contact_name ?? null,
+    emergencyContactPhone: row.emergency_contact_phone ?? null,
+    isActive: row.is_active,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicGuardian(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    guardianCode: row.guardian_code,
+    fullName: row.full_name,
+    relationship: row.relationship ?? null,
+    phone: row.phone,
+    hasLineLink: Boolean(row.line_user_id),
+    linkStatus: row.link_status,
+    notificationPreferences:
+      row.notification_preferences || {},
+    isActive: row.is_active,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicGuardianLink(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    guardianId: row.guardian_id,
+    riderId: row.rider_id,
+    isPrimary: row.is_primary,
+    canViewSchedule: row.can_view_schedule,
+    canRequestChange: row.can_request_change,
+    approvedAt: row.approved_at ?? null,
+  };
+}
+
+function publicLocation(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    riderId: row.rider_id ?? null,
+    locationType: row.location_type,
+    locationName: row.location_name,
+    postalCode: row.postal_code ?? null,
+    addressLine1: row.address_line1,
+    addressLine2: row.address_line2 ?? null,
+    latitude:
+      row.latitude === null || row.latitude === undefined
+        ? null
+        : Number(row.latitude),
+    longitude:
+      row.longitude === null || row.longitude === undefined
+        ? null
+        : Number(row.longitude),
+    accessNotes: row.access_notes ?? null,
+    isDefaultPickup: row.is_default_pickup,
+    isDefaultDropoff: row.is_default_dropoff,
+    isActive: row.is_active,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicRegularSchedule(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    riderId: row.rider_id,
+    dayOfWeek: row.day_of_week,
+    serviceType: row.service_type,
+    routeGroupCode: row.route_group_code,
+    pickupLocationId: row.pickup_location_id,
+    dropoffLocationId: row.dropoff_location_id,
+    scheduledPickupTime: row.scheduled_pickup_time,
+    scheduledDropoffTime: row.scheduled_dropoff_time,
+    effectiveFrom: row.effective_from,
+    effectiveTo: row.effective_to ?? null,
+    notes: row.notes ?? null,
+    isActive: row.is_active,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicRun(row, vehicle, assignments, stops) {
+  return {
+    id: row.id,
+    serviceDate: row.service_date,
+    runCode: row.run_code,
+    serviceType: row.service_type,
+    routeGroupCode: row.route_group_code,
+    scheduledStartAt: row.scheduled_start_at,
+    scheduledEndAt: row.scheduled_end_at,
+    actualStartAt: row.actual_start_at ?? null,
+    actualEndAt: row.actual_end_at ?? null,
+    runStatus: row.run_status,
+    notes: row.notes ?? null,
+    version: row.version,
+    vehicle: publicVehicle(vehicle),
+    assignments,
+    stops,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicStop(row, rider, pickupLocation, dropoffLocation) {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    riderId: row.rider_id,
+    rider: publicRider(rider),
+    regularScheduleId: row.regular_schedule_id ?? null,
+    stopOrder: row.stop_order,
+    pickupLocation: publicLocation(pickupLocation),
+    dropoffLocation: publicLocation(dropoffLocation),
+    plannedPickupAt: row.planned_pickup_at,
+    plannedDropoffAt: row.planned_dropoff_at,
+    actualBoardedAt: row.actual_boarded_at ?? null,
+    actualArrivedAt: row.actual_arrived_at ?? null,
+    actualHandedOverAt: row.actual_handed_over_at ?? null,
+    actualCompletedAt: row.actual_completed_at ?? null,
+    stopStatus: row.stop_status,
+    seatUnits: row.seat_units,
+    wheelchairUnits: row.wheelchair_units,
+    supportSummary: row.support_summary ?? null,
+    handoverNotes: row.handover_notes ?? null,
+    version: row.version,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicChangeRequest(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    riderId: row.rider_id,
+    guardianId: row.guardian_id ?? null,
+    requestedByStaffId: row.requested_by_staff_id ?? null,
+    serviceDate: row.service_date,
+    requestType: row.request_type,
+    requestedChanges: row.requested_changes || {},
+    requestStatus: row.request_status,
+    reviewedByStaffId: row.reviewed_by_staff_id ?? null,
+    reviewedAt: row.reviewed_at ?? null,
+    reviewNotes: row.review_notes ?? null,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
 }
 
 async function findFacilityByCode(env, facilityCode) {
@@ -892,11 +4451,17 @@ function mapSupabaseError(status, payload) {
       ? String(payload.message || "")
       : String(payload || "");
 
-  if (status === 409 || databaseCode === "23505") {
+  if (
+    status === 409 ||
+    databaseCode === "23505" ||
+    databaseCode === "23P01"
+  ) {
     return new AppError(
       409,
       "DUPLICATE_CONFLICT",
-      "同じ内容がすでに登録されています。画面を更新してご確認ください。",
+      databaseCode === "23P01"
+        ? "同じ時間帯に車両・スタッフ・利用者の予定が重複しています。別の時間または担当を選択してください。"
+        : "同じ内容がすでに登録されています。画面を更新してご確認ください。",
       internalMessage
     );
   }
@@ -913,6 +4478,14 @@ function mapSupabaseError(status, payload) {
       404,
       "DATABASE_RECORD_NOT_FOUND",
       "対象データが見つかりません。画面を更新してください。",
+      internalMessage
+    );
+  }
+  if (databaseCode === "23503") {
+    return new AppError(
+      404,
+      "RELATED_RECORD_NOT_FOUND",
+      "指定した利用者・場所・車両・スタッフが見つかりません。画面を更新してください。",
       internalMessage
     );
   }
@@ -1259,6 +4832,34 @@ async function verifyPbkdf2Pin(pin, storedHash) {
   );
 }
 
+async function hashPbkdf2Pin(pin) {
+  const iterations = 210000;
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(pin),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt,
+      iterations,
+    },
+    keyMaterial,
+    256
+  );
+  return [
+    "pbkdf2-sha256",
+    String(iterations),
+    base64UrlEncodeBytes(salt),
+    base64UrlEncodeBytes(new Uint8Array(bits)),
+  ].join("$");
+}
+
 async function constantTimeTextEqual(left, right) {
   const [leftHash, rightHash] = await Promise.all([
     crypto.subtle.digest("SHA-256", encoder.encode(left)),
@@ -1467,6 +5068,456 @@ function optionalString(value, label, minLength, maxLength) {
   return requireString(value, label, minLength, maxLength);
 }
 
+function requireCode(value, label, maxLength = 64) {
+  const code = requireString(value, label, 1, maxLength);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(code)) {
+    throw new AppError(
+      400,
+      "INVALID_CODE",
+      `${label}は半角英数字・ハイフン・アンダーバーで入力してください。`
+    );
+  }
+  return code;
+}
+
+function optionalLoginId(value) {
+  const loginId = optionalString(value, "ログインID", 3, 100);
+  if (
+    loginId &&
+    !/^[A-Za-z0-9._@-]{3,100}$/.test(loginId)
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_LOGIN_ID",
+      "ログインIDは半角英数字と記号（._@-）で入力してください。"
+    );
+  }
+  return loginId;
+}
+
+function optionalPin(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const pin = requireString(value, "暗証番号", 4, 12);
+  if (!/^[0-9]{4,12}$/.test(pin)) {
+    throw new AppError(
+      400,
+      "INVALID_PIN",
+      "暗証番号は4～12桁の半角数字で入力してください。"
+    );
+  }
+  return pin;
+}
+
+function requireUuid(value, label) {
+  if (!isUuid(value)) {
+    throw new AppError(
+      400,
+      "INVALID_UUID",
+      `${label}の形式が正しくありません。`
+    );
+  }
+  return value.toLowerCase();
+}
+
+function optionalUuid(value, label) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  return requireUuid(value, label);
+}
+
+function requireBoolean(value, label) {
+  if (typeof value !== "boolean") {
+    throw new AppError(
+      400,
+      "INVALID_BOOLEAN",
+      `${label}の指定が正しくありません。`
+    );
+  }
+  return value;
+}
+
+function optionalBoolean(value, defaultValue, label) {
+  if (value === undefined || value === null) {
+    return defaultValue;
+  }
+  return requireBoolean(value, label);
+}
+
+function requireInteger(value, label, minimum, maximum) {
+  const number = Number(value);
+  if (
+    !Number.isInteger(number) ||
+    number < minimum ||
+    number > maximum
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_INTEGER",
+      `${label}の数値を確認してください。`
+    );
+  }
+  return number;
+}
+
+function optionalNumber(value, label, minimum, maximum) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const number = Number(value);
+  if (
+    !Number.isFinite(number) ||
+    number < minimum ||
+    number > maximum
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_NUMBER",
+      `${label}の数値を確認してください。`
+    );
+  }
+  return number;
+}
+
+function requireEnum(value, label, allowedValues) {
+  if (
+    typeof value !== "string" ||
+    !allowedValues.includes(value)
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_ENUM",
+      `${label}の選択内容が正しくありません。`
+    );
+  }
+  return value;
+}
+
+function optionalEnum(
+  value,
+  label,
+  allowedValues,
+  defaultValue = null
+) {
+  if (value === undefined || value === null || value === "") {
+    return defaultValue;
+  }
+  return requireEnum(value, label, allowedValues);
+}
+
+function requireDate(value, label) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_DATE",
+      `${label}をYYYY-MM-DD形式で入力してください。`
+    );
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_DATE",
+      `${label}に存在しない日付が指定されています。`
+    );
+  }
+  return value;
+}
+
+function optionalDate(value, label) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  return requireDate(value, label);
+}
+
+function assertNotPastJstDate(value, message) {
+  if (value < jstDateString(new Date())) {
+    throw new AppError(
+      400,
+      "PAST_SERVICE_DATE",
+      message
+    );
+  }
+}
+
+function requireTime(value, label) {
+  if (
+    typeof value !== "string" ||
+    !/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value)
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_TIME",
+      `${label}を時刻形式で入力してください。`
+    );
+  }
+  return value.length === 5 ? `${value}:00` : value;
+}
+
+function requireIsoTimestamp(value, label) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T/.test(value)
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_TIMESTAMP",
+      `${label}の日時形式が正しくありません。`
+    );
+  }
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    throw new AppError(
+      400,
+      "INVALID_TIMESTAMP",
+      `${label}の日時形式が正しくありません。`
+    );
+  }
+  return date.toISOString();
+}
+
+function optionalIsoTimestamp(value, label) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  return requireIsoTimestamp(value, label);
+}
+
+function requirePhone(value, label) {
+  if (typeof value !== "string") {
+    throw new AppError(
+      400,
+      "PHONE_REQUIRED",
+      `${label}を入力してください。`
+    );
+  }
+  const phone = value.trim();
+  if (!normalizeJapanesePhone(phone)) {
+    throw new AppError(
+      400,
+      "INVALID_PHONE",
+      `${label}は日本国内の電話番号で入力してください。`
+    );
+  }
+  return phone;
+}
+
+function optionalPhone(value, label) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  return requirePhone(value, label);
+}
+
+function normalizeJapanesePhone(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const halfWidth = value.replace(/[０-９]/g, (digit) =>
+    String.fromCharCode(digit.charCodeAt(0) - 0xfee0)
+  );
+  let digits = halfWidth.replace(/[^0-9]/g, "");
+  if (digits.startsWith("81") && digits.length >= 11) {
+    digits = `0${digits.slice(2)}`;
+  }
+  return /^0[0-9]{9,10}$/.test(digits) ? digits : null;
+}
+
+function requirePlainObject(value, label) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_OBJECT",
+      `${label}の形式が正しくありません。`
+    );
+  }
+  return value;
+}
+
+function requireOptionalPlainObject(value, label) {
+  if (value === undefined || value === null) {
+    return {};
+  }
+  return requirePlainObject(value, label);
+}
+
+function validateRequestedChanges(requestType, value, label) {
+  const input = requirePlainObject(value, label);
+  const allowedByType = {
+    absence: ["reason", "direction", "note"],
+    time_change: [
+      "requestedPickupTime",
+      "requestedDropoffTime",
+      "note",
+    ],
+    location_change: [
+      "pickupLocationId",
+      "dropoffLocationId",
+      "note",
+    ],
+    one_way: ["direction", "note"],
+    temporary_use: [
+      "serviceType",
+      "pickupLocationId",
+      "dropoffLocationId",
+      "requestedPickupTime",
+      "requestedDropoffTime",
+      "note",
+    ],
+    other: ["note"],
+  };
+  const allowed = allowedByType[requestType] || [];
+  const output = {};
+  for (const [key, rawValue] of Object.entries(input)) {
+    if (!allowed.includes(key)) {
+      throw new AppError(
+        400,
+        "INVALID_CHANGE_FIELD",
+        "変更内容に対応していない項目が含まれています。"
+      );
+    }
+    if (["pickupLocationId", "dropoffLocationId"].includes(key)) {
+      output[key] = requireUuid(rawValue, "乗降場所ID");
+    } else if (
+      ["requestedPickupTime", "requestedDropoffTime"].includes(key)
+    ) {
+      output[key] = requireTime(rawValue, "希望時刻");
+    } else if (key === "direction") {
+      output[key] = requireEnum(
+        rawValue,
+        "対象便",
+        ["pickup", "dropoff", "both"]
+      );
+    } else if (key === "serviceType") {
+      output[key] = requireEnum(
+        rawValue,
+        "送迎区分",
+        ["pickup", "dropoff", "transfer"]
+      );
+    } else {
+      output[key] = requireString(rawValue, "変更理由・備考", 1, 1000);
+    }
+  }
+  if (Object.keys(output).length === 0) {
+    throw new AppError(
+      400,
+      "CHANGE_DETAILS_REQUIRED",
+      "変更内容を入力してください。"
+    );
+  }
+  return output;
+}
+
+function optionalSearchQuery(value) {
+  if (value === undefined || value === null || value.trim() === "") {
+    return null;
+  }
+  const query = requireString(value, "検索文字", 1, 50);
+  if (!/^[\p{L}\p{N}\sー々・._@+\-]+$/u.test(query)) {
+    throw new AppError(
+      400,
+      "INVALID_SEARCH_QUERY",
+      "検索文字に使用できない記号が含まれています。"
+    );
+  }
+  return query;
+}
+
+function escapePostgrestSearch(value) {
+  return value.replace(/\\/g, "\\\\").replace(/_/g, "\\_");
+}
+
+function getQueryLimit(request, defaultValue, maximum) {
+  const raw = new URL(request.url).searchParams.get("limit");
+  if (raw === null || raw === "") {
+    return defaultValue;
+  }
+  return requireInteger(raw, "表示件数", 1, maximum);
+}
+
+function requireIdempotencyKey(request, body = {}) {
+  const headerValue = request.headers.get("idempotency-key");
+  const bodyValue = body.idempotencyKey;
+  if (
+    headerValue &&
+    bodyValue &&
+    headerValue.trim() !== String(bodyValue).trim()
+  ) {
+    throw new AppError(
+      400,
+      "IDEMPOTENCY_KEY_MISMATCH",
+      "二重送信防止キーが一致しません。画面を更新してください。"
+    );
+  }
+  const key = requireString(
+    headerValue || bodyValue,
+    "二重送信防止キー",
+    8,
+    200
+  );
+  if (!/^[A-Za-z0-9._:-]{8,200}$/.test(key)) {
+    throw new AppError(
+      400,
+      "INVALID_IDEMPOTENCY_KEY",
+      "二重送信防止キーの形式が正しくありません。"
+    );
+  }
+  return key;
+}
+
+function requireStaffActor(session) {
+  if (session.actorType !== "staff" || !isUuid(session.actorId)) {
+    throw new AppError(
+      403,
+      "STAFF_LOGIN_REQUIRED",
+      "この操作にはスタッフIDでのログインが必要です。"
+    );
+  }
+  return session.actorId;
+}
+
+function assertHasChanges(changes) {
+  if (!changes || Object.keys(changes).length === 0) {
+    throw new AppError(
+      400,
+      "NO_CHANGES",
+      "変更する内容を入力してください。"
+    );
+  }
+}
+
+function staleUpdateError() {
+  return new AppError(
+    409,
+    "STALE_UPDATE",
+    "ほかの画面で先に更新されています。画面を更新してからもう一度操作してください。"
+  );
+}
+
+function jstDateString(date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 function isUuid(value) {
   return typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -1548,7 +5599,7 @@ function responseHeaders(corsOrigin, requestId, preflight = false) {
     if (preflight) {
       headers.set(
         "access-control-allow-methods",
-        "GET, POST, OPTIONS"
+        "GET, POST, PATCH, OPTIONS"
       );
       headers.set(
         "access-control-allow-headers",
@@ -1616,9 +5667,53 @@ function routeNotFoundResponse(
     "/v1/auth/member": ["POST"],
     "/v1/auth/logout": ["POST"],
     "/v1/system/check": ["POST"],
+    "/v1/staff": ["GET", "POST"],
+    "/v1/vehicles": ["GET", "POST"],
+    "/v1/riders": ["GET", "POST"],
+    "/v1/guardians": ["GET", "POST"],
+    "/v1/guardian-rider-links": ["POST"],
+    "/v1/locations": ["GET", "POST"],
+    "/v1/regular-schedules": ["GET", "POST"],
+    "/v1/runs": ["GET"],
+    "/v1/runs/generate": ["POST"],
+    "/v1/change-requests": ["GET", "POST"],
+    "/v1/dashboard/today": ["GET"],
   };
 
-  if (knownMethods[path] && !knownMethods[path].includes(method)) {
+  let allowed = knownMethods[path] || null;
+  const dynamicMethods = [
+    [/^\/v1\/staff\/[0-9a-f-]{36}$/i, ["PATCH"]],
+    [/^\/v1\/vehicles\/[0-9a-f-]{36}$/i, ["PATCH"]],
+    [/^\/v1\/riders\/[0-9a-f-]{36}$/i, ["GET", "PATCH"]],
+    [/^\/v1\/guardians\/[0-9a-f-]{36}$/i, ["PATCH"]],
+    [/^\/v1\/locations\/[0-9a-f-]{36}$/i, ["PATCH"]],
+    [
+      /^\/v1\/regular-schedules\/[0-9a-f-]{36}$/i,
+      ["PATCH"],
+    ],
+    [/^\/v1\/runs\/[0-9a-f-]{36}$/i, ["GET", "PATCH"]],
+    [/^\/v1\/runs\/[0-9a-f-]{36}\/staff$/i, ["POST"]],
+    [
+      /^\/v1\/runs\/[0-9a-f-]{36}\/staff\/remove$/i,
+      ["POST"],
+    ],
+    [/^\/v1\/stops\/[0-9a-f-]{36}\/events$/i, ["POST"]],
+    [/^\/v1\/stops\/[0-9a-f-]{36}\/correct$/i, ["POST"]],
+    [
+      /^\/v1\/change-requests\/[0-9a-f-]{36}\/review$/i,
+      ["POST"],
+    ],
+  ];
+  if (!allowed) {
+    for (const [pattern, methods] of dynamicMethods) {
+      if (pattern.test(path)) {
+        allowed = methods;
+        break;
+      }
+    }
+  }
+
+  if (allowed && !allowed.includes(method)) {
     const response = errorResponse(
       405,
       "METHOD_NOT_ALLOWED",
@@ -1626,7 +5721,7 @@ function routeNotFoundResponse(
       corsOrigin,
       requestId
     );
-    response.headers.set("allow", knownMethods[path].join(", "));
+    response.headers.set("allow", allowed.join(", "));
     return response;
   }
 
