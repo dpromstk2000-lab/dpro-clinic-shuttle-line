@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#0f766e">
+    <meta name="robots" content="noindex,nofollow">
+    <title>DPRO 福祉施設送迎｜現場スタッフ</title>
+    <link rel="stylesheet" href="staff.css">
+    <script src="config.js"></script>
+    <script type="module" src="staff.js"></script>
+  </head>
+  <body>
+    <noscript>
+      <div class="noscript-message">
+        この画面を利用するにはJavaScriptを有効にしてください。
+      </div>
+    </noscript>
+    <div id="staff-app" class="startup" aria-busy="true">
+      <div class="startup-card" role="status">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>現場スタッフ画面を準備しています</span>
+      </div>
+    </div>
+    <div id="staff-toast" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <dialog id="event-dialog" class="event-dialog">
+      <form method="dialog" id="event-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">乗降記録</p>
+            <h2 id="event-dialog-title">状態を更新</h2>
+          </div>
+          <button type="button" class="icon-button" data-dialog-close aria-label="閉じる">×</button>
+        </div>
+        <p id="event-dialog-description" class="dialog-description"></p>
+        <div class="field">
+          <label for="event-notes">現場メモ<span id="event-notes-required" class="required" hidden>必須</span></label>
+          <textarea id="event-notes" name="notes" maxlength="1000" rows="4" placeholder="必要な場合だけ入力してください"></textarea>
+          <p class="field-hint">家族向け画面には表示されない業務記録です。</p>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="button button-secondary" data-dialog-close>戻る</button>
+          <button type="submit" class="button" id="event-submit">記録する</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>

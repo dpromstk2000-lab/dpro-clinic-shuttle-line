@@ -754,6 +754,7 @@
                 <button type="submit" class="button button-wide">ログインする</button>
               </form>
               ${demoMode ? '<p class="demo-note"><strong>デモ環境：</strong>管理コードは「1234」です。実運行操作は、登録済みスタッフIDでログインしてください。</p>' : ""}
+              <a class="button button-secondary button-wide" href="staff.html" style="margin-top:12px">現場スタッフ画面を開く</a>
             </div>
             <p class="version-line">${escapeHtml(config.version || "SHUTTLE-4")}</p>
           </div>
@@ -979,7 +980,13 @@
       openReviewForm(actionButton.dataset.id, actionButton.dataset.decision);
     } else if (action === "run-detail") {
       const run = state.data.dashboard?.runs?.find((item) => item.id === actionButton.dataset.id);
-      if (run) openRunDetail(run);
+      if (run) {
+        try {
+          await openRunDetail(run);
+        } catch (error) {
+          showToast(friendlyError(error), "error");
+        }
+      }
     } else if (action === "run-system-check") {
       await runSystemCheck(actionButton);
     } else if (action === "prepare-demo") {
@@ -1607,6 +1614,7 @@
           <div class="record-line"><span class="record-label">画面版</span><span class="record-value">${escapeHtml(config.version || "SHUTTLE-4")}</span></div>
         </div>`,
       footer: `
+        <a class="button button-secondary" href="staff.html">現場スタッフ画面</a>
         <button type="button" class="button button-secondary" data-modal-close-button>閉じる</button>
         <button type="button" class="button button-danger" data-account-logout>ログアウト</button>`,
       onReady: (dialog) => {
@@ -2006,9 +2014,20 @@
     showToast(`変更依頼を${body.decision === "approved" ? "承認" : "却下"}しました。`);
   }
 
-  function openRunDetail(run) {
+  async function openRunDetail(run) {
+    const canAssign =
+      state.loginMode === "staff" &&
+      ["admin", "dispatcher"].includes(state.role);
+    if (canAssign && !state.data.staff.length) {
+      await loadStaff();
+    }
     const assignments = run.assignments || [];
     const stops = run.stops || [];
+    const assignmentControls = renderRunAssignmentControls(
+      run,
+      assignments,
+      canAssign
+    );
     openModal({
       title: `${formatTime(run.scheduledStartAt)} ${run.runCode}`,
       wide: true,
@@ -2034,6 +2053,7 @@
             </div>
           </div>
         </div>
+        ${assignmentControls}
         <section class="panel">
           <header class="panel-header"><div><h3 class="panel-title">利用者・乗降状況</h3><p class="panel-subtitle">内部メモや不要な個人情報は表示しません。</p></div></header>
           ${stops.length ? `
@@ -2053,9 +2073,193 @@
               </table>
             </div>` : emptyState("♙", "利用者の割当はありません", "この便にはまだ利用者が割り当てられていません。", "")}
         </section>`,
-      footer: '<button type="button" class="button" data-modal-close-button>閉じる</button>',
-      onReady: (dialog) => dialog.querySelector("[data-modal-close-button]")?.addEventListener("click", closeModal)
+      footer: '<a class="button button-secondary" href="staff.html">現場スタッフ画面</a><button type="button" class="button" data-modal-close-button>閉じる</button>',
+      onReady: (dialog) => {
+        dialog.querySelector("[data-modal-close-button]")
+          ?.addEventListener("click", closeModal);
+        dialog.querySelectorAll("[data-assign-run-staff]").forEach((button) => {
+          button.addEventListener("click", () =>
+            assignRunStaff(run.id, button.dataset.duty, button, dialog)
+          );
+        });
+        dialog.querySelectorAll("[data-remove-run-staff]").forEach((button) => {
+          button.addEventListener("click", () =>
+            removeRunStaff(
+              run.id,
+              button.dataset.staffId,
+              button.dataset.duty,
+              button
+            )
+          );
+        });
+      }
     });
+  }
+
+  function renderRunAssignmentControls(run, assignments, canAssign) {
+    if (!canAssign) {
+      return `
+        <div class="info-strip is-warning" role="status">
+          <span aria-hidden="true">△</span>
+          <div>
+            <strong>担当割当は配車担当のスタッフIDログインで行います。</strong><br>
+            管理コードは初期設定・閲覧用です。現場スタッフへ便を表示するには、配車担当でログインし直してください。
+          </div>
+        </div>`;
+    }
+
+    const activeStaff = (state.data.staff || []).filter(
+      (staff) => staff.isActive !== false
+    );
+    const assignedKeys = new Set(
+      assignments.map((item) => `${item.staffId}:${item.duty}`)
+    );
+    const assignedStaffIds = new Set(
+      assignments.map((item) => item.staffId)
+    );
+    const driver = assignments.find((item) => item.duty === "driver");
+    const attendants = assignments.filter(
+      (item) => item.duty === "attendant"
+    );
+    const driverOptions = activeStaff.filter(
+      (staff) =>
+        staff.staffRole === "driver" &&
+        !assignedKeys.has(`${staff.id}:driver`) &&
+        !assignedStaffIds.has(staff.id)
+    );
+    const attendantOptions = activeStaff.filter(
+      (staff) =>
+        staff.staffRole === "attendant" &&
+        !assignedKeys.has(`${staff.id}:attendant`) &&
+        !assignedStaffIds.has(staff.id)
+    );
+
+    return `
+      <section class="panel">
+        <header class="panel-header">
+          <div>
+            <h3 class="panel-title">担当スタッフ割当</h3>
+            <p class="panel-subtitle">同じ時間帯への重複割当はデータベース側でも拒否します。</p>
+          </div>
+        </header>
+        <div class="form-grid" style="padding:16px">
+          <div class="record-card">
+            <div class="record-card-header">
+              <div><h3>運転担当</h3><p class="record-code">1便につき1名</p></div>
+            </div>
+            ${driver
+              ? `<div class="record-details">
+                  <div class="record-line">
+                    <span class="record-label">割当済み</span>
+                    <span class="record-value">${escapeHtml(driver.staff?.fullName || "不明")}
+                      <button type="button" class="row-button" data-remove-run-staff data-staff-id="${escapeHtml(driver.staffId)}" data-duty="driver">解除</button>
+                    </span>
+                  </div>
+                </div>`
+              : `<div class="field" style="margin:16px">
+                  <label for="run-driver-select">運転員を選択</label>
+                  <select id="run-driver-select" data-assignment-select="driver">
+                    <option value="">選択してください</option>
+                    ${staffAssignmentOptions(driverOptions)}
+                  </select>
+                  <button type="button" class="button button-wide" data-assign-run-staff data-duty="driver" style="margin-top:10px" ${driverOptions.length ? "" : "disabled"}>運転担当へ割り当て</button>
+                </div>`}
+          </div>
+          <div class="record-card">
+            <div class="record-card-header">
+              <div><h3>添乗担当</h3><p class="record-code">必要な場合だけ割当</p></div>
+            </div>
+            <div class="record-details">
+              ${attendants.length
+                ? attendants.map((item) => `
+                    <div class="record-line">
+                      <span class="record-label">割当済み</span>
+                      <span class="record-value">${escapeHtml(item.staff?.fullName || "不明")}
+                        <button type="button" class="row-button" data-remove-run-staff data-staff-id="${escapeHtml(item.staffId)}" data-duty="attendant">解除</button>
+                      </span>
+                    </div>`).join("")
+                : '<div class="record-line"><span class="record-label">割当</span><span class="record-value">なし</span></div>'}
+            </div>
+            <div class="field" style="margin:16px">
+              <label for="run-attendant-select">添乗員を追加</label>
+              <select id="run-attendant-select" data-assignment-select="attendant">
+                <option value="">選択してください</option>
+                ${staffAssignmentOptions(attendantOptions)}
+              </select>
+              <button type="button" class="button button-secondary button-wide" data-assign-run-staff data-duty="attendant" style="margin-top:10px" ${attendantOptions.length ? "" : "disabled"}>添乗担当へ追加</button>
+            </div>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  function staffAssignmentOptions(staff) {
+    return staff.map((item) => `
+      <option value="${escapeHtml(item.id)}">
+        ${escapeHtml(item.fullName)}（${escapeHtml(labels.roles[item.staffRole] || item.staffRole)}）
+      </option>`).join("");
+  }
+
+  async function assignRunStaff(runId, duty, button, dialog) {
+    const select = dialog.querySelector(
+      `[data-assignment-select="${duty}"]`
+    );
+    const staffId = String(select?.value || "");
+    if (!staffId) {
+      showToast("割り当てるスタッフを選択してください。", "warning");
+      select?.focus();
+      return;
+    }
+    setBusy(button, true, "割当中…");
+    try {
+      await api(`/v1/runs/${encodeURIComponent(runId)}/staff`, {
+        method: "POST",
+        body: { staffId, duty }
+      });
+      await refreshRunDetail(runId);
+      showToast(
+        `${duty === "driver" ? "運転" : "添乗"}担当を割り当てました。`
+      );
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+      setBusy(button, false);
+    }
+  }
+
+  async function removeRunStaff(runId, staffId, duty, button) {
+    const confirmed = window.confirm(
+      `${duty === "driver" ? "運転" : "添乗"}担当の割当を解除しますか？`
+    );
+    if (!confirmed) return;
+    setBusy(button, true, "解除中…");
+    try {
+      await api(
+        `/v1/runs/${encodeURIComponent(runId)}/staff/remove`,
+        {
+          method: "POST",
+          body: { staffId, duty }
+        }
+      );
+      await refreshRunDetail(runId);
+      showToast(
+        `${duty === "driver" ? "運転" : "添乗"}担当を解除しました。`
+      );
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+      setBusy(button, false);
+    }
+  }
+
+  async function refreshRunDetail(runId) {
+    closeModal();
+    await loadDashboard();
+    renderToday();
+    const updated = state.data.dashboard?.runs?.find(
+      (item) => item.id === runId
+    );
+    if (updated) {
+      await openRunDetail(updated);
+    }
   }
 
   async function generateRuns(button) {
