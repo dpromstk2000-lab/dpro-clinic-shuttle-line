@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "dpro-welfare-shuttle-line-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-07-27",
+  "workers_dev": true,
+  "keep_vars": true,
+  "observability": {
+    "enabled": true
+  },
+  "secrets": {
+    "required": [
+      "SUPABASE_SECRET_KEY",
+      "SESSION_SECRET"
+    ]
+  }
+}
