@@ -2,8 +2,8 @@
  * DPRO 福祉施設送迎 LINE
  * Cloudflare Worker API
  *
- * STEP: SHUTTLE-5
- * Version: SHUTTLE-5-R1-WORKER-20260728
+ * STEP: SHUTTLE-7
+ * Version: SHUTTLE-7-WORKER-20260728
  *
  * 公開ファイルへ秘密情報を記載しないこと。
  * SUPABASE_SECRET_KEY（推奨）または旧SUPABASE_SERVICE_ROLE_KEY、
@@ -11,10 +11,12 @@
  */
 
 const SERVICE_NAME = "DPRO Welfare Shuttle API";
-const WORKER_VERSION = "SHUTTLE-5-R1-WORKER-20260728";
+const WORKER_VERSION = "SHUTTLE-7-WORKER-20260728";
 const DATABASE_VERSION = "SHUTTLE-1-DB-20260727";
-const DEMO_PREPARE_VERSION = "SHUTTLE-5-DEMO-20260728";
+const DEMO_PREPARE_VERSION = "SHUTTLE-7-DEMO-20260728";
 const DEMO_STAFF_PIN = "5678";
+const DEMO_GUARDIAN_CODE = "DEMO-G01";
+const DEMO_GUARDIAN_PIN = "0301";
 const PIN_PBKDF2_ITERATIONS = 100000;
 const TOKEN_ISSUER = "dpro-welfare-shuttle";
 const TOKEN_AUDIENCE = "dpro-welfare-shuttle-api";
@@ -98,7 +100,7 @@ export default {
               service: SERVICE_NAME,
               workerVersion: WORKER_VERSION,
               requiredDatabaseVersion: DATABASE_VERSION,
-              apiStage: "SHUTTLE-5",
+              apiStage: "SHUTTLE-7",
             },
             200,
             corsOrigin,
@@ -126,6 +128,32 @@ export default {
         case "POST /v1/auth/member":
           await enforceRateLimit(request, env, "member-login");
           return await handleMemberLogin(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/auth/member/demo":
+          await enforceRateLimit(request, env, "member-demo-login");
+          return await handleDemoMemberLogin(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/member/link/request":
+          await enforceRateLimit(request, env, "member-link-request");
+          return await handleMemberLinkRequest(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/member/home":
+          return await handleMemberHome(
             request,
             env,
             corsOrigin,
@@ -222,6 +250,14 @@ export default {
 
         case "POST /v1/guardian-rider-links":
           return await handleGuardianRiderLinkCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/guardian-rider-links":
+          return await handleGuardianRiderLinkList(
             request,
             env,
             corsOrigin,
@@ -530,17 +566,7 @@ async function handleMemberLogin(
   requestId
 ) {
   assertBaseConfiguration(env, { requireSession: true });
-
-  if (
-    typeof env.LINE_CHANNEL_ID !== "string" ||
-    !/^[0-9]{5,20}$/.test(env.LINE_CHANNEL_ID)
-  ) {
-    throw new AppError(
-      503,
-      "LINE_AUTH_NOT_CONFIGURED",
-      "LINE連携の設定が完了していません。管理者へ連絡してください。"
-    );
-  }
+  const channelId = requireLineChannelId(env);
 
   const body = await readJsonObject(request);
   const facilityCode = requireFacilityCode(body.facilityCode);
@@ -556,7 +582,7 @@ async function handleMemberLogin(
   const lineClaims = await verifyLineIdToken(
     idToken,
     nonce,
-    env.LINE_CHANNEL_ID
+    channelId
   );
 
   const params = new URLSearchParams();
@@ -618,6 +644,501 @@ async function handleMemberLogin(
         fullName: guardian.full_name,
       },
       facility: publicFacility(facility),
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+function requireLineChannelId(env) {
+  if (
+    typeof env.LINE_CHANNEL_ID !== "string" ||
+    !/^[0-9]{5,20}$/.test(env.LINE_CHANNEL_ID)
+  ) {
+    throw new AppError(
+      503,
+      "LINE_AUTH_NOT_CONFIGURED",
+      "LINE連携の設定が完了していません。管理者へ連絡してください。"
+    );
+  }
+  return env.LINE_CHANNEL_ID;
+}
+
+async function handleDemoMemberLogin(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  assertBaseConfiguration(env, { requireSession: true });
+  const body = await readJsonObject(request);
+  const facilityCode = requireFacilityCode(body.facilityCode);
+  const guardianCode = requireCode(body.guardianCode, "家族番号");
+  const pin = requireString(body.pin, "デモ暗証番号", 4, 4);
+  if (!/^[0-9]{4}$/.test(pin)) {
+    throw new AppError(
+      400,
+      "INVALID_DEMO_MEMBER_PIN",
+      "デモ暗証番号は4桁の半角数字で入力してください。"
+    );
+  }
+
+  const facility = await findFacilityByCode(env, facilityCode);
+  assertFacilityEnvironment(facility, env);
+  if (
+    env.APP_ENVIRONMENT !== "demo" ||
+    facility.environment !== "demo" ||
+    env.PRODUCTION_GUARD !== "enabled"
+  ) {
+    throw new AppError(
+      403,
+      "DEMO_MEMBER_LOGIN_FORBIDDEN",
+      "本番環境ではデモ家族ログインを利用できません。"
+    );
+  }
+
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,facility_id,guardian_code,full_name,phone_normalized,link_status,is_active"
+  );
+  params.set("facility_id", `eq.${facility.id}`);
+  params.set("guardian_code", `eq.${guardianCode}`);
+  params.set("link_status", "eq.approved");
+  params.set("is_active", "eq.true");
+  params.set("limit", "1");
+  const guardianRows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${params.toString()}`
+  );
+  const guardian = Array.isArray(guardianRows)
+    ? guardianRows[0]
+    : null;
+  const expectedPin = String(guardian?.phone_normalized || "").slice(-4);
+  const valid =
+    guardian &&
+    guardian.guardian_code === DEMO_GUARDIAN_CODE &&
+    expectedPin === DEMO_GUARDIAN_PIN &&
+    await constantTimeTextEqual(pin, expectedPin);
+
+  if (!valid) {
+    throw new AppError(
+      401,
+      "INVALID_DEMO_MEMBER_CREDENTIALS",
+      "家族番号またはデモ暗証番号が正しくありません。"
+    );
+  }
+
+  const token = await issueSessionToken(
+    {
+      subject: `guardian:${guardian.id}`,
+      facilityId: facility.id,
+      actorType: "guardian",
+      actorId: guardian.id,
+      role: "guardian",
+      displayName: guardian.full_name,
+    },
+    env
+  );
+
+  await writeAuditLog(env, {
+    facilityId: facility.id,
+    actorType: "guardian",
+    actorId: guardian.id,
+    action: "guardian_demo_login",
+    entityType: "session",
+    entityId: null,
+    requestId,
+    request,
+  });
+
+  return successResponse(
+    {
+      token,
+      expiresIn: getTokenTtlSeconds(env),
+      role: "guardian",
+      demo: true,
+      member: {
+        id: guardian.id,
+        guardianCode: guardian.guardian_code,
+        fullName: guardian.full_name,
+      },
+      facility: publicFacility(facility),
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleMemberLinkRequest(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  assertBaseConfiguration(env, { requireSession: true });
+  const channelId = requireLineChannelId(env);
+  const body = await readJsonObject(request);
+  const facilityCode = requireFacilityCode(body.facilityCode);
+  const guardianCode = requireCode(body.guardianCode, "家族番号");
+  const phone = requirePhone(body.phone, "登録電話番号");
+  const idToken = requireString(
+    body.idToken,
+    "LINE IDトークン",
+    20,
+    8192
+  );
+  const nonce = optionalString(body.nonce, "nonce", 8, 200);
+  const facility = await findFacilityByCode(env, facilityCode);
+  assertFacilityEnvironment(facility, env);
+  const lineClaims = await verifyLineIdToken(
+    idToken,
+    nonce,
+    channelId
+  );
+
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,guardian_code,full_name,phone_normalized,line_user_id,link_status,is_active,updated_at"
+  );
+  params.set("facility_id", `eq.${facility.id}`);
+  params.set("guardian_code", `eq.${guardianCode}`);
+  params.set(
+    "phone_normalized",
+    `eq.${normalizeJapanesePhone(phone)}`
+  );
+  params.set("is_active", "eq.true");
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${params.toString()}`
+  );
+  const guardian = Array.isArray(rows) ? rows[0] : null;
+
+  if (!guardian) {
+    throw new AppError(
+      403,
+      "MEMBER_IDENTITY_NOT_MATCHED",
+      "家族番号と登録電話番号を確認できませんでした。事業所へお問い合わせください。"
+    );
+  }
+  if (
+    guardian.line_user_id &&
+    guardian.line_user_id !== lineClaims.sub
+  ) {
+    throw new AppError(
+      409,
+      "MEMBER_ALREADY_LINKED",
+      "別のLINEアカウントが連携済みです。事業所へ連携解除を依頼してください。"
+    );
+  }
+  if (
+    guardian.line_user_id === lineClaims.sub &&
+    guardian.link_status === "approved"
+  ) {
+    return successResponse(
+      {
+        linkStatus: "approved",
+        message: "LINE連携は承認済みです。もう一度ログインしてください。",
+      },
+      200,
+      corsOrigin,
+      requestId
+    );
+  }
+
+  const duplicateParams = new URLSearchParams();
+  duplicateParams.set("select", "id");
+  duplicateParams.set("facility_id", `eq.${facility.id}`);
+  duplicateParams.set("line_user_id", `eq.${lineClaims.sub}`);
+  duplicateParams.set("id", `neq.${guardian.id}`);
+  duplicateParams.set("limit", "1");
+  const duplicateRows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${duplicateParams.toString()}`
+  );
+  if (Array.isArray(duplicateRows) && duplicateRows[0]) {
+    throw new AppError(
+      409,
+      "LINE_ACCOUNT_ALREADY_USED",
+      "このLINEアカウントは別の家族情報と連携済みです。事業所へお問い合わせください。"
+    );
+  }
+
+  const updateParams = new URLSearchParams();
+  updateParams.set("id", `eq.${guardian.id}`);
+  updateParams.set("facility_id", `eq.${facility.id}`);
+  updateParams.set("updated_at", `eq.${guardian.updated_at}`);
+  const updatedRows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${updateParams.toString()}`,
+    {
+      method: "PATCH",
+      body: {
+        line_user_id: lineClaims.sub,
+        link_status: "pending",
+      },
+      prefer: "return=representation",
+    }
+  );
+  const updated = Array.isArray(updatedRows) ? updatedRows[0] : null;
+  if (!updated) {
+    throw staleUpdateError();
+  }
+
+  await writeAuditLog(env, {
+    facilityId: facility.id,
+    actorType: "guardian",
+    actorId: guardian.id,
+    action: "request_line_link",
+    entityType: "guardian",
+    entityId: guardian.id,
+    requestId,
+    request,
+  });
+
+  return successResponse(
+    {
+      linkStatus: "pending",
+      message: "LINE連携を申請しました。事業所の承認後に利用できます。",
+    },
+    202,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleMemberHome(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, ["guardian"]);
+  await enforceRateLimit(request, env, "member-home", session);
+  const url = new URL(request.url);
+  const serviceDate = requireDate(
+    url.searchParams.get("serviceDate") || jstDateString(new Date()),
+    "送迎日"
+  );
+  const facility = await findFacilityById(env, session.facilityId);
+  assertFacilityEnvironment(facility, env);
+
+  const guardianParams = new URLSearchParams();
+  guardianParams.set(
+    "select",
+    "id,guardian_code,full_name,relationship,link_status,is_active"
+  );
+  guardianParams.set("id", `eq.${session.actorId}`);
+  guardianParams.set("facility_id", `eq.${session.facilityId}`);
+  guardianParams.set("link_status", "eq.approved");
+  guardianParams.set("is_active", "eq.true");
+  guardianParams.set("limit", "1");
+  const guardianRows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${guardianParams.toString()}`
+  );
+  const guardian = Array.isArray(guardianRows)
+    ? guardianRows[0]
+    : null;
+  if (!guardian) {
+    throw new AppError(
+      403,
+      "MEMBER_LINK_NOT_APPROVED",
+      "LINE連携の承認状態を確認できません。事業所へお問い合わせください。"
+    );
+  }
+
+  const linkParams = new URLSearchParams();
+  linkParams.set(
+    "select",
+    "id,rider_id,is_primary,can_view_schedule,can_request_change,approved_at"
+  );
+  linkParams.set("facility_id", `eq.${session.facilityId}`);
+  linkParams.set("guardian_id", `eq.${session.actorId}`);
+  linkParams.set("approved_at", "not.is.null");
+  const linkRows = await supabaseRequest(
+    env,
+    `shuttle_guardian_rider_links?${linkParams.toString()}`
+  );
+  const links = Array.isArray(linkRows) ? linkRows : [];
+  const riderIds = [...new Set(links.map((row) => row.rider_id))];
+  if (riderIds.length === 0) {
+    return successResponse(
+      {
+        member: publicMemberGuardian(guardian),
+        facility: publicFacility(facility),
+        serviceDate,
+        riders: [],
+        schedules: [],
+        stops: [],
+        changeRequests: [],
+      },
+      200,
+      corsOrigin,
+      requestId
+    );
+  }
+
+  const riders = await fetchRowsByIds(
+    env,
+    "shuttle_riders",
+    session.facilityId,
+    riderIds,
+    "id,rider_code,full_name,is_active"
+  );
+  const allowedRiderIds = riders
+    .filter((row) => row.is_active)
+    .map((row) => row.id);
+  const viewableRiderIds = links
+    .filter(
+      (row) =>
+        row.can_view_schedule &&
+        allowedRiderIds.includes(row.rider_id)
+    )
+    .map((row) => row.rider_id);
+  const riderById = new Map(riders.map((row) => [row.id, row]));
+  const linkByRiderId = new Map(
+    links.map((row) => [row.rider_id, row])
+  );
+
+  let schedules = [];
+  if (viewableRiderIds.length > 0) {
+    const dayOfWeek = new Date(
+      `${serviceDate}T12:00:00+09:00`
+    ).getUTCDay();
+    const scheduleParams = new URLSearchParams();
+    scheduleParams.set(
+      "select",
+      "id,rider_id,service_type,pickup_location_id,dropoff_location_id,scheduled_pickup_time,scheduled_dropoff_time,effective_from,effective_to,is_active"
+    );
+    scheduleParams.set("facility_id", `eq.${session.facilityId}`);
+    scheduleParams.set(
+      "rider_id",
+      `in.(${viewableRiderIds.join(",")})`
+    );
+    scheduleParams.set("day_of_week", `eq.${dayOfWeek}`);
+    scheduleParams.set("effective_from", `lte.${serviceDate}`);
+    scheduleParams.set(
+      "or",
+      `(effective_to.is.null,effective_to.gte.${serviceDate})`
+    );
+    scheduleParams.set("is_active", "eq.true");
+    scheduleParams.set("order", "scheduled_pickup_time.asc");
+    const scheduleRows = await supabaseRequest(
+      env,
+      `shuttle_regular_schedules?${scheduleParams.toString()}`
+    );
+    schedules = Array.isArray(scheduleRows) ? scheduleRows : [];
+  }
+
+  const locationIds = [
+    ...new Set(
+      schedules.flatMap((row) => [
+        row.pickup_location_id,
+        row.dropoff_location_id,
+      ])
+    ),
+  ].filter(Boolean);
+  const locations = await fetchRowsByIds(
+    env,
+    "shuttle_locations",
+    session.facilityId,
+    locationIds,
+    "id,location_type,location_name"
+  );
+  const locationById = new Map(
+    locations.map((row) => [row.id, row])
+  );
+
+  let stops = [];
+  if (viewableRiderIds.length > 0) {
+    const rangeStart = new Date(
+      `${serviceDate}T00:00:00+09:00`
+    );
+    const rangeEnd = new Date(rangeStart.getTime() + 86400000);
+    const stopParams = new URLSearchParams();
+    stopParams.set(
+      "select",
+      "id,run_id,rider_id,pickup_location_id,dropoff_location_id,planned_pickup_at,planned_dropoff_at,actual_boarded_at,actual_arrived_at,actual_handed_over_at,actual_completed_at,stop_status"
+    );
+    stopParams.set("facility_id", `eq.${session.facilityId}`);
+    stopParams.set(
+      "rider_id",
+      `in.(${viewableRiderIds.join(",")})`
+    );
+    stopParams.set(
+      "planned_pickup_at",
+      `gte.${rangeStart.toISOString()}`
+    );
+    stopParams.append(
+      "planned_pickup_at",
+      `lt.${rangeEnd.toISOString()}`
+    );
+    stopParams.set("order", "planned_pickup_at.asc");
+    const stopRows = await supabaseRequest(
+      env,
+      `shuttle_stops?${stopParams.toString()}`
+    );
+    stops = Array.isArray(stopRows) ? stopRows : [];
+  }
+
+  const runIds = [...new Set(stops.map((row) => row.run_id))];
+  const runs = await fetchRowsByIds(
+    env,
+    "shuttle_runs",
+    session.facilityId,
+    runIds,
+    "id,run_code,service_type,scheduled_start_at,scheduled_end_at,actual_start_at,actual_end_at,run_status"
+  );
+  const runById = new Map(runs.map((row) => [row.id, row]));
+
+  const changeParams = new URLSearchParams();
+  changeParams.set(
+    "select",
+    "id,rider_id,service_date,request_type,requested_changes,request_status,reviewed_at,review_notes,created_at,updated_at"
+  );
+  changeParams.set("facility_id", `eq.${session.facilityId}`);
+  changeParams.set("guardian_id", `eq.${session.actorId}`);
+  changeParams.set("service_date", `eq.${serviceDate}`);
+  changeParams.set("order", "created_at.desc");
+  const changeRows = await supabaseRequest(
+    env,
+    `shuttle_change_requests?${changeParams.toString()}`
+  );
+
+  return successResponse(
+    {
+      member: publicMemberGuardian(guardian),
+      facility: publicFacility(facility),
+      serviceDate,
+      riders: allowedRiderIds.map((riderId) =>
+        publicMemberRider(
+          riderById.get(riderId),
+          linkByRiderId.get(riderId)
+        )
+      ),
+      schedules: schedules.map((row) =>
+        publicMemberSchedule(
+          row,
+          riderById.get(row.rider_id),
+          locationById
+        )
+      ),
+      stops: stops.map((row) =>
+        publicMemberStop(
+          row,
+          riderById.get(row.rider_id),
+          runById.get(row.run_id),
+          locationById
+        )
+      ),
+      changeRequests: (changeRows || []).map(
+        publicMemberChangeRequest
+      ),
     },
     200,
     corsOrigin,
@@ -694,6 +1215,7 @@ async function handleSystemCheck(
     phoneB,
     phoneC,
     demoStatus,
+    demoMemberStatus,
   ] = await Promise.all([
     supabaseRpc(env, "shuttle_schema_check", {}),
     supabaseRequest(
@@ -713,6 +1235,9 @@ async function handleSystemCheck(
       ? supabaseRpc(env, "shuttle_demo_status", {
           p_facility_id: facility.id,
         })
+      : Promise.resolve(null),
+    facility.environment === "demo"
+      ? getDemoMemberStatus(env, facility.id)
       : Promise.resolve(null),
   ]);
 
@@ -754,18 +1279,26 @@ async function handleSystemCheck(
       demoStatus.ok === true &&
       demoStatus.prepared === true
     );
+  const demoMemberOk =
+    facility.environment !== "demo" ||
+    demoMemberStatus?.ready === true;
+  const memberAuthenticationOk =
+    facility.environment === "demo"
+      ? demoMemberOk
+      : lineConfigured;
   const requiredOk =
     databaseOk &&
     facilitySettingsOk &&
     phoneNormalizationOk &&
     productionGuardOk &&
-    demoDataOk;
+    demoDataOk &&
+    memberAuthenticationOk;
 
   return successResponse(
     {
       systemCheck: {
         ok: requiredOk,
-        stage: "SHUTTLE-5",
+        stage: "SHUTTLE-7",
         checkedAt: new Date().toISOString(),
         worker: {
           status: "pass",
@@ -824,6 +1357,14 @@ async function handleSystemCheck(
           scheduleCount: demoStatus?.schedule_count ?? null,
           dispatcherLoginReady:
             demoStatus?.dispatcher_login_ready ?? null,
+          memberLoginReady:
+            facility.environment === "demo"
+              ? demoMemberOk
+              : null,
+          guardianCount:
+            demoMemberStatus?.guardianCount ?? null,
+          guardianLinkCount:
+            demoMemberStatus?.linkCount ?? null,
         },
         browserCors: {
           status: corsConfigured ? "pass" : "pending",
@@ -831,7 +1372,12 @@ async function handleSystemCheck(
         },
         lineMemberAuthentication: {
           status: lineConfigured ? "pass" : "pending",
+          configured: lineConfigured,
           requiredAtStep: "SHUTTLE-7",
+          demoPortalReady:
+            facility.environment === "demo"
+              ? demoMemberOk
+              : null,
         },
         rateLimiting: {
           status: rateLimitConfigured ? "pass" : "recommended",
@@ -841,6 +1387,8 @@ async function handleSystemCheck(
           status: "pass",
           riderManagement: true,
           guardianManagement: true,
+          memberPortal: true,
+          secureLineLinkRequest: true,
           regularSchedules: true,
           dailyRuns: true,
           staffAssignments: true,
@@ -914,6 +1462,10 @@ async function handleDemoPrepare(
           "デモデータの準備結果を確認できませんでした。再度お試しください。"
         );
       }
+      const demoMember = await ensureDemoMember(
+        env,
+        facility.id
+      );
 
       await writeAuditLog(env, {
         facilityId: facility.id,
@@ -947,10 +1499,196 @@ async function handleDemoPrepare(
             pin: DEMO_STAFF_PIN,
             role: "dispatcher",
           },
+          demoMember: {
+            guardianCode: demoMember.guardian.guardian_code,
+            pin: DEMO_GUARDIAN_PIN,
+            fullName: demoMember.guardian.full_name,
+            riderName: demoMember.rider.full_name,
+          },
         },
       };
     }
   );
+}
+
+async function ensureDemoMember(env, facilityId) {
+  const riderParams = new URLSearchParams();
+  riderParams.set("select", "id,rider_code,full_name");
+  riderParams.set("facility_id", `eq.${facilityId}`);
+  riderParams.set("rider_code", "eq.DEMO-R01");
+  riderParams.set("is_active", "eq.true");
+  riderParams.set("limit", "1");
+  const riderRows = await supabaseRequest(
+    env,
+    `shuttle_riders?${riderParams.toString()}`
+  );
+  const rider = Array.isArray(riderRows) ? riderRows[0] : null;
+  if (!rider) {
+    throw new AppError(
+      502,
+      "DEMO_MEMBER_RIDER_MISSING",
+      "デモ家族に紐づける利用者を確認できませんでした。"
+    );
+  }
+
+  const guardianParams = new URLSearchParams();
+  guardianParams.set(
+    "select",
+    "id,guardian_code,full_name,phone,phone_normalized,line_user_id,link_status,is_active"
+  );
+  guardianParams.set("facility_id", `eq.${facilityId}`);
+  guardianParams.set("guardian_code", `eq.${DEMO_GUARDIAN_CODE}`);
+  guardianParams.set("limit", "1");
+  const guardianRows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${guardianParams.toString()}`
+  );
+  let guardian = Array.isArray(guardianRows)
+    ? guardianRows[0]
+    : null;
+
+  if (!guardian) {
+    const inserted = await supabaseRequest(
+      env,
+      "shuttle_guardians",
+      {
+        method: "POST",
+        body: {
+          facility_id: facilityId,
+          guardian_code: DEMO_GUARDIAN_CODE,
+          full_name: "デモ 家族A",
+          relationship: "家族",
+          phone: "090-0000-0301",
+          link_status: "approved",
+          notification_preferences: {},
+          is_active: true,
+        },
+        prefer: "return=representation",
+      }
+    );
+    guardian = Array.isArray(inserted) ? inserted[0] : null;
+  } else {
+    const patchParams = new URLSearchParams();
+    patchParams.set("id", `eq.${guardian.id}`);
+    patchParams.set("facility_id", `eq.${facilityId}`);
+    const updated = await supabaseRequest(
+      env,
+      `shuttle_guardians?${patchParams.toString()}`,
+      {
+        method: "PATCH",
+        body: {
+          full_name: "デモ 家族A",
+          relationship: "家族",
+          phone: "090-0000-0301",
+          link_status: "approved",
+          is_active: true,
+        },
+        prefer: "return=representation",
+      }
+    );
+    guardian = Array.isArray(updated) ? updated[0] : guardian;
+  }
+  if (!guardian) {
+    throw new AppError(
+      502,
+      "DEMO_MEMBER_GUARDIAN_MISSING",
+      "デモ家族情報を準備できませんでした。"
+    );
+  }
+
+  const linkParams = new URLSearchParams();
+  linkParams.set("select", "id,approved_at");
+  linkParams.set("facility_id", `eq.${facilityId}`);
+  linkParams.set("guardian_id", `eq.${guardian.id}`);
+  linkParams.set("rider_id", `eq.${rider.id}`);
+  linkParams.set("limit", "1");
+  const linkRows = await supabaseRequest(
+    env,
+    `shuttle_guardian_rider_links?${linkParams.toString()}`
+  );
+  let link = Array.isArray(linkRows) ? linkRows[0] : null;
+  if (!link) {
+    const inserted = await supabaseRequest(
+      env,
+      "shuttle_guardian_rider_links",
+      {
+        method: "POST",
+        body: {
+          facility_id: facilityId,
+          guardian_id: guardian.id,
+          rider_id: rider.id,
+          is_primary: true,
+          can_view_schedule: true,
+          can_request_change: true,
+          approved_at: new Date().toISOString(),
+          approved_by_staff_id: null,
+        },
+        prefer: "return=representation",
+      }
+    );
+    link = Array.isArray(inserted) ? inserted[0] : null;
+  } else {
+    const patchParams = new URLSearchParams();
+    patchParams.set("id", `eq.${link.id}`);
+    patchParams.set("facility_id", `eq.${facilityId}`);
+    const updated = await supabaseRequest(
+      env,
+      `shuttle_guardian_rider_links?${patchParams.toString()}`,
+      {
+        method: "PATCH",
+        body: {
+          is_primary: true,
+          can_view_schedule: true,
+          can_request_change: true,
+          approved_at: link.approved_at || new Date().toISOString(),
+        },
+        prefer: "return=representation",
+      }
+    );
+    link = Array.isArray(updated) ? updated[0] : link;
+  }
+  if (!link) {
+    throw new AppError(
+      502,
+      "DEMO_MEMBER_LINK_MISSING",
+      "デモ家族と利用者を紐づけできませんでした。"
+    );
+  }
+  return { guardian, rider, link };
+}
+
+async function getDemoMemberStatus(env, facilityId) {
+  const guardianParams = new URLSearchParams();
+  guardianParams.set("select", "id");
+  guardianParams.set("facility_id", `eq.${facilityId}`);
+  guardianParams.set("guardian_code", `eq.${DEMO_GUARDIAN_CODE}`);
+  guardianParams.set("link_status", "eq.approved");
+  guardianParams.set("is_active", "eq.true");
+  const guardianRows = await supabaseRequest(
+    env,
+    `shuttle_guardians?${guardianParams.toString()}`
+  );
+  const guardian = Array.isArray(guardianRows)
+    ? guardianRows[0]
+    : null;
+  if (!guardian) {
+    return { ready: false, guardianCount: 0, linkCount: 0 };
+  }
+  const linkParams = new URLSearchParams();
+  linkParams.set("select", "id");
+  linkParams.set("facility_id", `eq.${facilityId}`);
+  linkParams.set("guardian_id", `eq.${guardian.id}`);
+  linkParams.set("approved_at", "not.is.null");
+  const linkRows = await supabaseRequest(
+    env,
+    `shuttle_guardian_rider_links?${linkParams.toString()}`
+  );
+  const linkCount = Array.isArray(linkRows) ? linkRows.length : 0;
+  return {
+    ready: linkCount > 0,
+    guardianCount: 1,
+    linkCount,
+  };
 }
 
 async function handleDynamicRoute(
@@ -2036,11 +2774,34 @@ async function handleGuardianUpdate(
   if (body.isActive !== undefined) {
     changes.is_active = requireBoolean(body.isActive, "有効状態");
   }
+  if (body.clearLineLink === true) {
+    if (session.role !== "admin") {
+      throw new AppError(
+        403,
+        "ADMIN_REQUIRED_FOR_LINE_UNLINK",
+        "LINE連携の解除には管理者ログインが必要です。"
+      );
+    }
+    changes.line_user_id = null;
+    changes.link_status = "pending";
+  } else if (
+    body.clearLineLink !== undefined &&
+    body.clearLineLink !== false
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_BOOLEAN",
+      "LINE連携解除の指定が正しくありません。"
+    );
+  }
   assertHasChanges(changes);
   const params = new URLSearchParams();
   params.set("id", `eq.${guardianId}`);
   params.set("facility_id", `eq.${session.facilityId}`);
   params.set("updated_at", `eq.${expectedUpdatedAt}`);
+  if (body.linkStatus === "approved") {
+    params.set("line_user_id", "not.is.null");
+  }
   const rows = await supabaseRequest(
     env,
     `shuttle_guardians?${params.toString()}`,
@@ -2072,6 +2833,56 @@ async function handleGuardianUpdate(
   );
 }
 
+async function handleGuardianRiderLinkList(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "guardian-link-list", session);
+  const url = new URL(request.url);
+  const guardianId = optionalUuid(
+    url.searchParams.get("guardianId"),
+    "家族ID"
+  );
+  const riderId = optionalUuid(
+    url.searchParams.get("riderId"),
+    "利用者ID"
+  );
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,guardian_id,rider_id,is_primary,can_view_schedule,can_request_change,approved_at,created_at"
+  );
+  params.set("facility_id", `eq.${session.facilityId}`);
+  if (guardianId) {
+    params.set("guardian_id", `eq.${guardianId}`);
+  }
+  if (riderId) {
+    params.set("rider_id", `eq.${riderId}`);
+  }
+  params.set("order", "created_at.asc");
+  params.set("limit", String(getQueryLimit(request, 200, 500)));
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_guardian_rider_links?${params.toString()}`
+  );
+  return successResponse(
+    {
+      links: (rows || []).map(publicGuardianLink),
+      count: Array.isArray(rows) ? rows.length : 0,
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
 async function handleGuardianRiderLinkCreate(
   request,
   env,
@@ -2086,6 +2897,23 @@ async function handleGuardianRiderLinkCreate(
   const body = await readJsonObject(request);
   const guardianId = requireUuid(body.guardianId, "家族ID");
   const riderId = requireUuid(body.riderId, "利用者ID");
+  const [guardianRows] = await Promise.all([
+    fetchRowsByIds(
+      env,
+      "shuttle_guardians",
+      session.facilityId,
+      [guardianId],
+      "id"
+    ),
+    findRiderById(env, session.facilityId, riderId),
+  ]);
+  if (!guardianRows[0]) {
+    throw new AppError(
+      404,
+      "GUARDIAN_NOT_FOUND",
+      "対象の家族情報が見つかりません。"
+    );
+  }
   return await runIdempotentOperation(
     request,
     env,
@@ -4223,6 +5051,81 @@ function publicGuardianLink(row) {
   };
 }
 
+function publicMemberGuardian(row) {
+  return {
+    id: row.id,
+    guardianCode: row.guardian_code,
+    fullName: row.full_name,
+    relationship: row.relationship ?? null,
+  };
+}
+
+function publicMemberRider(row, link) {
+  if (!row || !link) {
+    return null;
+  }
+  return {
+    id: row.id,
+    riderCode: row.rider_code,
+    fullName: row.full_name,
+    isPrimary: Boolean(link.is_primary),
+    canViewSchedule: Boolean(link.can_view_schedule),
+    canRequestChange: Boolean(link.can_request_change),
+  };
+}
+
+function publicMemberSchedule(row, rider, locationById) {
+  const pickup = locationById.get(row.pickup_location_id);
+  const dropoff = locationById.get(row.dropoff_location_id);
+  return {
+    id: row.id,
+    riderId: row.rider_id,
+    riderName: rider?.full_name || "利用者",
+    serviceType: row.service_type,
+    scheduledPickupTime: row.scheduled_pickup_time,
+    scheduledDropoffTime: row.scheduled_dropoff_time,
+    pickupLocationName: pickup?.location_name || "乗車場所",
+    dropoffLocationName: dropoff?.location_name || "降車場所",
+  };
+}
+
+function publicMemberStop(row, rider, run, locationById) {
+  const pickup = locationById.get(row.pickup_location_id);
+  const dropoff = locationById.get(row.dropoff_location_id);
+  return {
+    id: row.id,
+    riderId: row.rider_id,
+    riderName: rider?.full_name || "利用者",
+    runCode: run?.run_code || null,
+    serviceType: run?.service_type || null,
+    runStatus: run?.run_status || null,
+    stopStatus: row.stop_status,
+    plannedPickupAt: row.planned_pickup_at,
+    plannedDropoffAt: row.planned_dropoff_at,
+    actualBoardedAt: row.actual_boarded_at ?? null,
+    actualArrivedAt: row.actual_arrived_at ?? null,
+    actualHandedOverAt: row.actual_handed_over_at ?? null,
+    actualCompletedAt: row.actual_completed_at ?? null,
+    pickupLocationName: pickup?.location_name || "乗車場所",
+    dropoffLocationName: dropoff?.location_name || "降車場所",
+  };
+}
+
+function publicMemberChangeRequest(row) {
+  return {
+    id: row.id,
+    riderId: row.rider_id,
+    serviceDate: row.service_date,
+    requestType: row.request_type,
+    requestedChanges: row.requested_changes || {},
+    requestStatus: row.request_status,
+    reviewedAt: row.reviewed_at ?? null,
+    reviewNotes: row.review_notes ?? null,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
 function publicLocation(row) {
   if (!row) {
     return null;
@@ -5821,14 +6724,17 @@ function routeNotFoundResponse(
     "/v1/auth/admin": ["POST"],
     "/v1/auth/staff": ["POST"],
     "/v1/auth/member": ["POST"],
+    "/v1/auth/member/demo": ["POST"],
     "/v1/auth/logout": ["POST"],
+    "/v1/member/link/request": ["POST"],
+    "/v1/member/home": ["GET"],
     "/v1/system/check": ["POST"],
     "/v1/demo/prepare": ["POST"],
     "/v1/staff": ["GET", "POST"],
     "/v1/vehicles": ["GET", "POST"],
     "/v1/riders": ["GET", "POST"],
     "/v1/guardians": ["GET", "POST"],
-    "/v1/guardian-rider-links": ["POST"],
+    "/v1/guardian-rider-links": ["GET", "POST"],
     "/v1/locations": ["GET", "POST"],
     "/v1/regular-schedules": ["GET", "POST"],
     "/v1/runs": ["GET"],
