@@ -1,4 +1,4 @@
-// DPRO SHUTTLE-3 Cloudflare Builds
+// DPRO SHUTTLE-4 Cloudflare Builds
 {
   "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
   "name": "dpro-welfare-shuttle-line-api",
@@ -6,6 +6,9 @@
   "compatibility_date": "2026-07-27",
   "workers_dev": true,
   "keep_vars": true,
+  "vars": {
+    "ALLOWED_ORIGINS": "https://dpromstk2000-lab.github.io"
+  },
   "observability": {
     "enabled": true
   },
