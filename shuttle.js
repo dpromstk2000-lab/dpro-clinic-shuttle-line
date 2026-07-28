@@ -24,6 +24,8 @@
     data: {
       dashboard: null,
       riders: [],
+      guardians: [],
+      guardianLinks: [],
       regularSchedules: [],
       locations: [],
       staff: [],
@@ -46,6 +48,12 @@
       shortLabel: "利用者",
       icon: "♙",
       description: "送迎利用者、移動支援区分、緊急連絡先を管理します"
+    },
+    families: {
+      label: "家族・LINE連携",
+      shortLabel: "家族",
+      icon: "♧",
+      description: "家族情報、利用者との関係、LINE連携の承認状態を管理します"
     },
     schedules: {
       label: "定期予定",
@@ -129,6 +137,12 @@
       approved: "承認",
       rejected: "却下",
       cancelled: "取消"
+    },
+    guardianLinkStatus: {
+      pending: "承認待ち",
+      approved: "連携承認済み",
+      rejected: "却下",
+      suspended: "停止"
     },
     days: ["日", "月", "火", "水", "木", "金", "土"]
   });
@@ -232,6 +246,8 @@
     state.data = {
       dashboard: null,
       riders: [],
+      guardians: [],
+      guardianLinks: [],
       regularSchedules: [],
       locations: [],
       staff: [],
@@ -548,6 +564,31 @@
         updatedAt: now
       }
     ];
+    const guardians = [
+      {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        guardianCode: "G-001",
+        fullName: "田中 花子",
+        relationship: "長女",
+        phone: "090-1111-2222",
+        hasLineLink: true,
+        linkStatus: "pending",
+        notificationPreferences: {},
+        isActive: true,
+        updatedAt: now
+      }
+    ];
+    const guardianLinks = [
+      {
+        id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        guardianId: guardians[0].id,
+        riderId: sampleRiders[0].id,
+        isPrimary: true,
+        canViewSchedule: true,
+        canRequestChange: true,
+        approvedAt: now
+      }
+    ];
 
     if (path === "/v1/auth/admin" || path === "/v1/auth/staff") {
       return Promise.resolve({
@@ -571,6 +612,55 @@
       return Promise.resolve({
         ok: true,
         rider: { id: uuid(), ...options.body, isActive: true, updatedAt: now }
+      });
+    }
+    if (path.startsWith("/v1/guardians/") && method === "PATCH") {
+      return Promise.resolve({
+        ok: true,
+        guardian: {
+          ...guardians[0],
+          linkStatus: options.body.linkStatus || "pending",
+          hasLineLink: options.body.clearLineLink ? false : true,
+          updatedAt: now
+        }
+      });
+    }
+    if (path.startsWith("/v1/guardians") && method === "GET") {
+      return Promise.resolve({
+        ok: true,
+        guardians,
+        count: guardians.length
+      });
+    }
+    if (path === "/v1/guardians" && method === "POST") {
+      return Promise.resolve({
+        ok: true,
+        guardian: {
+          id: uuid(),
+          ...options.body,
+          hasLineLink: false,
+          isActive: true,
+          updatedAt: now
+        }
+      });
+    }
+    if (
+      path.startsWith("/v1/guardian-rider-links") &&
+      method === "GET"
+    ) {
+      return Promise.resolve({
+        ok: true,
+        links: guardianLinks,
+        count: guardianLinks.length
+      });
+    }
+    if (
+      path === "/v1/guardian-rider-links" &&
+      method === "POST"
+    ) {
+      return Promise.resolve({
+        ok: true,
+        link: { id: uuid(), ...options.body, approvedAt: now }
       });
     }
     if (path.startsWith("/v1/staff") && method === "GET") {
@@ -622,7 +712,7 @@
       return Promise.resolve({
         ok: true,
         demoData: {
-          version: "SHUTTLE-5-DEMO-20260728",
+          version: "SHUTTLE-7-DEMO-20260728",
           prepared: true,
           duplicateSafe: true,
           counts: {
@@ -637,6 +727,12 @@
           loginId: "demo.dispatcher",
           pin: "5678",
           role: "dispatcher"
+        },
+        demoMember: {
+          guardianCode: "DEMO-G01",
+          pin: "0301",
+          fullName: "デモ 家族A",
+          riderName: "デモ 利用者A"
         }
       });
     }
@@ -645,15 +741,15 @@
         ok: true,
         systemCheck: {
           ok: true,
-          stage: "SHUTTLE-5",
-          worker: { status: "pass", version: "SHUTTLE-5-WORKER-20260728" },
+          stage: "SHUTTLE-7",
+          worker: { status: "pass", version: "SHUTTLE-7-WORKER-20260728" },
           database: { status: "pass", version: "SHUTTLE-1-DB-20260727", missingTables: [], missingRpcs: [], rlsDisabledTables: [], constraintCount: 155, indexCount: 65 },
           facility: { status: "pass", facilityCode: config.facilityCode, environment: "demo", scheduleStepMinutes: 5, businessStartTime: "07:00:00", businessEndTime: "20:00:00" },
           phoneNormalization: { status: "pass", normalizedValue: "09012345678" },
           productionGuard: { status: "pass" },
           demoData: {
             status: "pass",
-            version: "SHUTTLE-5-DEMO-20260728",
+            version: "SHUTTLE-7-DEMO-20260728",
             prepared: true,
             duplicateSafe: true,
             staffCount: 2,
@@ -661,10 +757,13 @@
             riderCount: 4,
             locationCount: 5,
             scheduleCount: 40,
-            dispatcherLoginReady: true
+            dispatcherLoginReady: true,
+            memberLoginReady: true,
+            guardianCount: 1,
+            guardianLinkCount: 1
           },
           browserCors: { status: "pass" },
-          lineMemberAuthentication: { status: "pending", requiredAtStep: "SHUTTLE-7" },
+          lineMemberAuthentication: { status: "pending", configured: false, requiredAtStep: "SHUTTLE-7", demoPortalReady: true },
           rateLimiting: { status: "recommended" },
           operationalApi: { status: "pass" }
         }
@@ -865,7 +964,7 @@
             </div>
           </div>
           <nav class="sidebar-nav">
-            ${["today", "riders", "schedules", "resources", "changes", "system"]
+            ${["today", "riders", "families", "schedules", "resources", "changes", "system"]
               .map((key) => navigationButton(key))
               .join("")}
           </nav>
@@ -906,7 +1005,7 @@
           <main id="main-content" class="content" tabindex="-1"></main>
         </div>
         <nav class="mobile-bottom-nav" aria-label="スマートフォンメニュー">
-          ${["today", "riders", "schedules", "resources", "changes"]
+          ${["today", "riders", "families", "schedules", "changes"]
             .map((key) => navigationButton(key, true))
             .join("")}
         </nav>
@@ -966,6 +1065,25 @@
       await logout();
     } else if (action === "open-rider-form") {
       openRiderForm();
+    } else if (action === "open-guardian-form") {
+      openGuardianForm();
+    } else if (action === "approve-guardian-link") {
+      await updateGuardianLinkStatus(
+        actionButton.dataset.id,
+        "approved",
+        actionButton
+      );
+    } else if (action === "suspend-guardian-link") {
+      await updateGuardianLinkStatus(
+        actionButton.dataset.id,
+        "suspended",
+        actionButton
+      );
+    } else if (action === "clear-guardian-link") {
+      await clearGuardianLineLink(
+        actionButton.dataset.id,
+        actionButton
+      );
     } else if (action === "open-location-form") {
       await openLocationForm();
     } else if (action === "open-schedule-form") {
@@ -1034,6 +1152,13 @@
       } else if (state.activeSection === "riders") {
         await loadRiders("");
         renderRiders();
+      } else if (state.activeSection === "families") {
+        await Promise.all([
+          loadRiders(""),
+          loadGuardians(),
+          loadGuardianLinks()
+        ]);
+        renderFamilies();
       } else if (state.activeSection === "schedules") {
         await Promise.all([loadSchedules(), loadLocations(), loadRiders("")]);
         renderSchedules();
@@ -1064,6 +1189,16 @@
     const suffix = search ? `?query=${encodeURIComponent(search)}&limit=100` : "?limit=100";
     const result = await api(`/v1/riders${suffix}`);
     state.data.riders = result.riders || [];
+  }
+
+  async function loadGuardians() {
+    const result = await api("/v1/guardians?limit=200");
+    state.data.guardians = result.guardians || [];
+  }
+
+  async function loadGuardianLinks() {
+    const result = await api("/v1/guardian-rider-links?limit=500");
+    state.data.guardianLinks = result.links || [];
   }
 
   async function loadSchedules() {
@@ -1290,6 +1425,126 @@
       </div>`;
   }
 
+  function renderFamilies() {
+    const content = document.getElementById("main-content");
+    const guardians = state.data.guardians || [];
+    const links = state.data.guardianLinks || [];
+    const riderById = new Map(
+      (state.data.riders || []).map((item) => [item.id, item])
+    );
+    const linksByGuardian = new Map();
+    for (const link of links) {
+      const current = linksByGuardian.get(link.guardianId) || [];
+      current.push(link);
+      linksByGuardian.set(link.guardianId, current);
+    }
+    const canManage = ["admin", "reception"].includes(state.role);
+    const isAdmin = state.role === "admin";
+    const pendingCount = guardians.filter(
+      (guardian) =>
+        guardian.hasLineLink && guardian.linkStatus === "pending"
+    ).length;
+
+    content.innerHTML = `
+      <section class="content-header">
+        <div>
+          <h2 class="content-title">家族・LINE連携</h2>
+          <p class="content-description">家族と利用者の閲覧範囲を分け、LINE連携申請を事業所側で承認します。</p>
+        </div>
+        <div class="action-row">
+          <a class="button button-secondary" href="member.html?demo=1" target="_blank" rel="noopener">家族デモ画面</a>
+          <button type="button" class="button" data-action="open-guardian-form" ${canManage && state.data.riders.length ? "" : "disabled"}><span aria-hidden="true">＋</span>家族を登録</button>
+        </div>
+      </section>
+      ${!canManage ? `
+        <div class="info-strip is-warning">
+          <span aria-hidden="true">△</span>
+          <div><strong>閲覧のみ可能です。</strong><br>家族登録とLINE連携状態の変更には、管理者または受付の権限が必要です。</div>
+        </div>` : ""}
+      ${!state.data.riders.length ? `
+        <div class="info-strip is-warning">
+          <span aria-hidden="true">△</span>
+          <div><strong>最初に利用者を登録してください。</strong><br>家族情報は、閲覧対象となる利用者と必ず紐づけて登録します。</div>
+        </div>` : ""}
+      <section class="panel">
+        <header class="panel-header">
+          <div>
+            <h2 class="panel-title">登録家族</h2>
+            <p class="panel-subtitle">承認待ち ${pendingCount}件。電話番号は本人確認に使用しますが、家族画面へは返しません。</p>
+          </div>
+          ${statusBadge(pendingCount ? "pending" : "approved", {
+            pending: `${pendingCount}件 承認待ち`,
+            approved: "承認待ちなし"
+          })}
+        </header>
+        ${guardians.length ? `
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">家族</th>
+                  <th scope="col">電話番号</th>
+                  <th scope="col">対象利用者</th>
+                  <th scope="col">LINE連携</th>
+                  <th scope="col">閲覧・変更権限</th>
+                  <th scope="col">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${guardians.map((guardian) => {
+                  const guardianLinks = linksByGuardian.get(guardian.id) || [];
+                  const riderNames = guardianLinks
+                    .map((link) => riderById.get(link.riderId)?.fullName)
+                    .filter(Boolean);
+                  const permissions = guardianLinks.map((link) => {
+                    const rider = riderById.get(link.riderId);
+                    const scopes = [
+                      link.canViewSchedule ? "予定閲覧" : null,
+                      link.canRequestChange ? "変更依頼" : null
+                    ].filter(Boolean);
+                    return `${rider?.fullName || "利用者"}：${scopes.join("・") || "権限なし"}`;
+                  });
+                  const canApprove =
+                    canManage &&
+                    guardian.hasLineLink &&
+                    guardian.linkStatus === "pending";
+                  const canSuspend =
+                    canManage &&
+                    guardian.hasLineLink &&
+                    guardian.linkStatus === "approved";
+                  return `
+                    <tr>
+                      <td class="cell-primary" data-label="家族">
+                        <span class="primary-cell">${escapeHtml(guardian.fullName)}</span>
+                        <span class="secondary-cell">${escapeHtml(guardian.guardianCode)}${guardian.relationship ? `・${escapeHtml(guardian.relationship)}` : ""}</span>
+                      </td>
+                      <td data-label="電話番号">${escapeHtml(guardian.phone || "―")}</td>
+                      <td data-label="対象利用者">${escapeHtml(riderNames.join("、") || "未紐付け")}</td>
+                      <td data-label="LINE連携">
+                        ${guardian.hasLineLink
+                          ? statusBadge(guardian.linkStatus, labels.guardianLinkStatus)
+                          : statusBadge("inactive", { inactive: "未申請" })}
+                      </td>
+                      <td data-label="閲覧・変更権限">
+                        ${permissions.length
+                          ? permissions.map((item) => `<span class="secondary-cell">${escapeHtml(item)}</span>`).join("")
+                          : "―"}
+                      </td>
+                      <td data-label="操作">
+                        <div class="row-actions">
+                          <button type="button" class="row-button" data-action="approve-guardian-link" data-id="${escapeHtml(guardian.id)}" ${canApprove ? "" : "disabled"}>承認</button>
+                          <button type="button" class="row-button" data-action="suspend-guardian-link" data-id="${escapeHtml(guardian.id)}" ${canSuspend ? "" : "disabled"}>停止</button>
+                          <button type="button" class="row-button" data-action="clear-guardian-link" data-id="${escapeHtml(guardian.id)}" ${isAdmin && guardian.hasLineLink ? "" : "disabled"}>連携解除</button>
+                        </div>
+                      </td>
+                    </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>` : emptyState("♧", "家族が登録されていません", "利用者を選択し、家族番号・氏名・電話番号を登録してください。", canManage && state.data.riders.length ? '<button type="button" class="button" data-action="open-guardian-form">家族を登録</button>' : "")}
+      </section>`;
+  }
+
   function renderSchedules() {
     const content = document.getElementById("main-content");
     const schedules = state.data.regularSchedules || [];
@@ -1503,7 +1758,7 @@
           <header class="panel-header">
             <div>
               <h2 class="panel-title">デモ環境の準備</h2>
-              <p class="panel-subtitle">架空の利用者4名、スタッフ2名、車両2台、平日の定期予定40件を重複なく準備します。</p>
+              <p class="panel-subtitle">架空の利用者4名、家族1名、スタッフ2名、車両2台、平日の定期予定40件を重複なく準備します。</p>
             </div>
             ${statusBadge(
               demoPrepare?.prepared
@@ -1520,6 +1775,7 @@
           <div class="record-details">
             <div class="record-line"><span class="record-label">配車担当ログインID</span><span class="record-value">demo.dispatcher</span></div>
             <div class="record-line"><span class="record-label">デモ暗証番号</span><span class="record-value">5678</span></div>
+            <div class="record-line"><span class="record-label">家族デモ</span><span class="record-value">家族番号 DEMO-G01／暗証番号 0301</span></div>
             <div class="record-line"><span class="record-label">重複防止</span><span class="record-value">同じ操作を再実行しても追加重複しません</span></div>
           </div>
           <div class="action-row">
@@ -1542,8 +1798,9 @@
       ["電話番号正規化", check.phoneNormalization?.status, check.phoneNormalization?.normalizedValue],
       ["production_guard", check.productionGuard?.status, check.facility?.environment],
       ["デモデータ", check.demoData?.status, check.demoData?.prepared ? `スタッフ ${check.demoData?.staffCount || 0}名／車両 ${check.demoData?.vehicleCount || 0}台／利用者 ${check.demoData?.riderCount || 0}名／定期予定 ${check.demoData?.scheduleCount || 0}件` : "システム確認からデモデータを準備してください"],
+      ["家族デモポータル", check.demoData?.memberLoginReady ? "pass" : "pending", check.demoData?.memberLoginReady ? `家族 ${check.demoData?.guardianCount || 0}名／利用者紐づけ ${check.demoData?.guardianLinkCount || 0}件` : "デモデータ準備で家族情報を作成します"],
       ["ブラウザCORS", check.browserCors?.status, check.browserCors?.status === "pass" ? "許可元設定済み" : "フロント公開前に設定"],
-      ["LINE会員認証", check.lineMemberAuthentication?.status, check.lineMemberAuthentication?.requiredAtStep || "SHUTTLE-7"],
+      ["LINE会員認証", check.lineMemberAuthentication?.status, check.lineMemberAuthentication?.configured ? "LINE Channel ID設定済み" : "本番LIFF公開前にLINE Channel IDを設定"],
       ["レート制限", check.rateLimiting?.status, check.rateLimiting?.status === "pass" ? "設定済み" : "本番前に推奨"]
     ];
     return `
@@ -1611,10 +1868,11 @@
           <div class="record-line"><span class="record-label">権限</span><span class="record-value">${escapeHtml(labels.roles[state.role] || state.role || "―")}</span></div>
           <div class="record-line"><span class="record-label">認証方法</span><span class="record-value">${escapeHtml(state.loginMode === "staff" ? "スタッフID" : "管理コード")}</span></div>
           <div class="record-line"><span class="record-label">環境</span><span class="record-value">${escapeHtml(state.facility?.environment || config.environment || "―")}</span></div>
-          <div class="record-line"><span class="record-label">画面版</span><span class="record-value">${escapeHtml(config.version || "SHUTTLE-4")}</span></div>
+          <div class="record-line"><span class="record-label">画面版</span><span class="record-value">${escapeHtml(config.version || "SHUTTLE-7")}</span></div>
         </div>`,
       footer: `
         <a class="button button-secondary" href="staff.html">現場スタッフ画面</a>
+        <a class="button button-secondary" href="member.html?demo=1">家族デモ画面</a>
         <button type="button" class="button button-secondary" data-modal-close-button>閉じる</button>
         <button type="button" class="button button-danger" data-account-logout>ログアウト</button>`,
       onReady: (dialog) => {
@@ -1703,6 +1961,200 @@
     await loadRiders("");
     renderRiders();
     showToast(`${body.fullName}さんを登録しました。`);
+  }
+
+  function openGuardianForm() {
+    if (!["admin", "reception"].includes(state.role)) {
+      showToast(
+        "家族の登録には管理者または受付の権限が必要です。",
+        "warning"
+      );
+      return;
+    }
+    const riders = state.data.riders || [];
+    if (!riders.length) {
+      showToast(
+        "家族と紐づける利用者を先に登録してください。",
+        "warning"
+      );
+      return;
+    }
+    openModal({
+      title: "家族と閲覧対象を登録",
+      wide: true,
+      body: `
+        <form id="guardian-form" novalidate>
+          <div class="form-grid">
+            ${textField("guardianCode", "家族番号", {
+              required: true,
+              placeholder: "例：G-001",
+              maxlength: 40
+            })}
+            ${textField("fullName", "家族氏名", {
+              required: true,
+              autocomplete: "name",
+              maxlength: 100
+            })}
+            ${textField("relationship", "続柄", {
+              placeholder: "例：長女",
+              maxlength: 50
+            })}
+            ${textField("phone", "本人確認用電話番号", {
+              required: true,
+              inputmode: "tel",
+              autocomplete: "tel",
+              maxlength: 30,
+              placeholder: "例：090-1234-5678"
+            })}
+            <div class="field is-full">
+              <label for="guardian-rider-id">閲覧対象の利用者<span class="required-mark">必須</span></label>
+              <select id="guardian-rider-id" name="riderId" required>
+                <option value="">選択してください</option>
+                ${riders.map((rider) => `<option value="${escapeHtml(rider.id)}">${escapeHtml(rider.fullName)}（${escapeHtml(rider.riderCode)}）</option>`).join("")}
+              </select>
+            </div>
+            <div class="field is-full">
+              <span class="field-label">家族画面の権限</span>
+              <div class="segmented">
+                <label><input type="checkbox" name="isPrimary" checked>主連絡先</label>
+                <label><input type="checkbox" name="canViewSchedule" checked>送迎予定を閲覧</label>
+                <label><input type="checkbox" name="canRequestChange" checked>変更依頼を送信</label>
+              </div>
+              <p class="field-hint">家族画面には内部メモ・住所・電話番号・緊急連絡先を表示しません。</p>
+            </div>
+          </div>
+        </form>`,
+      footer: modalFormFooter("guardian-form", "登録して紐づける"),
+      onReady: (dialog) => {
+        bindModalForm(dialog, "guardian-form", submitGuardian);
+      }
+    });
+  }
+
+  async function submitGuardian(form) {
+    const phone = formValue(form, "phone");
+    if (!isValidPhone(phone)) {
+      throw new Error("本人確認用電話番号を正しく入力してください。");
+    }
+    const guardianBody = {
+      guardianCode: formValue(form, "guardianCode"),
+      fullName: formValue(form, "fullName"),
+      relationship: nullIfEmpty(formValue(form, "relationship")),
+      phone,
+      linkStatus: "pending",
+      notificationPreferences: {},
+      isActive: true
+    };
+    const guardianResult = await api("/v1/guardians", {
+      method: "POST",
+      body: guardianBody
+    });
+    const guardianId = guardianResult.guardian?.id;
+    if (!guardianId) {
+      throw new Error(
+        "家族情報の登録結果を確認できませんでした。画面を更新してご確認ください。"
+      );
+    }
+    try {
+      await api("/v1/guardian-rider-links", {
+        method: "POST",
+        body: {
+          guardianId,
+          riderId: formValue(form, "riderId"),
+          isPrimary: checked(form, "isPrimary"),
+          canViewSchedule: checked(form, "canViewSchedule"),
+          canRequestChange: checked(form, "canRequestChange")
+        }
+      });
+    } catch (error) {
+      throw new Error(
+        `家族情報は登録されましたが、利用者との紐づけを完了できませんでした。画面を更新して家族番号「${guardianBody.guardianCode}」をご確認ください。${error?.message ? `（${error.message}）` : ""}`
+      );
+    }
+    closeModal();
+    await Promise.all([loadGuardians(), loadGuardianLinks()]);
+    renderFamilies();
+    showToast(
+      `${guardianBody.fullName}さんを登録し、利用者と紐づけました。`
+    );
+  }
+
+  async function updateGuardianLinkStatus(
+    guardianId,
+    linkStatus,
+    button
+  ) {
+    const guardian = (state.data.guardians || []).find(
+      (item) => item.id === guardianId
+    );
+    if (!guardian) {
+      showToast("対象の家族情報が見つかりません。", "error");
+      return;
+    }
+    const actionLabel =
+      linkStatus === "approved" ? "LINE連携を承認" : "LINE連携を停止";
+    if (
+      !window.confirm(
+        `${guardian.fullName}さんの${actionLabel}します。よろしいですか？`
+      )
+    ) {
+      return;
+    }
+    setBusy(button, true, "処理中…");
+    try {
+      await api(`/v1/guardians/${encodeURIComponent(guardian.id)}`, {
+        method: "PATCH",
+        body: {
+          expectedUpdatedAt: guardian.updatedAt,
+          linkStatus
+        }
+      });
+      await loadGuardians();
+      renderFamilies();
+      showToast(`${guardian.fullName}さんの${actionLabel}しました。`);
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function clearGuardianLineLink(guardianId, button) {
+    const guardian = (state.data.guardians || []).find(
+      (item) => item.id === guardianId
+    );
+    if (!guardian) {
+      showToast("対象の家族情報が見つかりません。", "error");
+      return;
+    }
+    if (state.role !== "admin") {
+      showToast("LINE連携の解除には管理者権限が必要です。", "warning");
+      return;
+    }
+    if (
+      !window.confirm(
+        `${guardian.fullName}さんのLINEアカウント連携を解除します。\n再利用するには、ご家族からの再申請と事業所の再承認が必要です。実行しますか？`
+      )
+    ) {
+      return;
+    }
+    setBusy(button, true, "解除中…");
+    try {
+      await api(`/v1/guardians/${encodeURIComponent(guardian.id)}`, {
+        method: "PATCH",
+        body: {
+          expectedUpdatedAt: guardian.updatedAt,
+          clearLineLink: true
+        }
+      });
+      await loadGuardians();
+      renderFamilies();
+      showToast(`${guardian.fullName}さんのLINE連携を解除しました。`);
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
   }
 
   function openVehicleForm() {
@@ -2299,7 +2751,7 @@
       return;
     }
     const confirmed = window.confirm(
-      "架空の利用者・スタッフ・車両・定期予定を準備します。\n同じ操作を再実行しても重複登録されません。実行しますか？"
+      "架空の利用者・家族・スタッフ・車両・定期予定を準備します。\n同じ操作を再実行しても重複登録されません。実行しますか？"
     );
     if (!confirmed) return;
     setBusy(button, true, "準備中…");
@@ -2317,7 +2769,7 @@
       state.data.systemCheck = checkResult.systemCheck;
       renderSystem();
       showToast(
-        `デモデータを準備しました。スタッフIDは「${result.demoStaff?.loginId || "demo.dispatcher"}」、暗証番号は「${result.demoStaff?.pin || "5678"}」です。`,
+        `デモデータを準備しました。スタッフIDは「${result.demoStaff?.loginId || "demo.dispatcher"}」／暗証番号「${result.demoStaff?.pin || "5678"}」、家族番号は「${result.demoMember?.guardianCode || "DEMO-G01"}」／暗証番号「${result.demoMember?.pin || "0301"}」です。`,
         "success",
         "demo-prepare"
       );
