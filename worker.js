@@ -2,8 +2,8 @@
  * DPRO 福祉施設送迎 LINE
  * Cloudflare Worker API
  *
- * STEP: SHUTTLE-3
- * Version: SHUTTLE-3-WORKER-20260728
+ * STEP: SHUTTLE-5
+ * Version: SHUTTLE-5-WORKER-20260728
  *
  * 公開ファイルへ秘密情報を記載しないこと。
  * SUPABASE_SECRET_KEY（推奨）または旧SUPABASE_SERVICE_ROLE_KEY、
@@ -11,8 +11,10 @@
  */
 
 const SERVICE_NAME = "DPRO Welfare Shuttle API";
-const WORKER_VERSION = "SHUTTLE-3-WORKER-20260728";
+const WORKER_VERSION = "SHUTTLE-5-WORKER-20260728";
 const DATABASE_VERSION = "SHUTTLE-1-DB-20260727";
+const DEMO_PREPARE_VERSION = "SHUTTLE-5-DEMO-20260728";
+const DEMO_STAFF_PIN = "5678";
 const TOKEN_ISSUER = "dpro-welfare-shuttle";
 const TOKEN_AUDIENCE = "dpro-welfare-shuttle-api";
 const MAX_JSON_BYTES = 64 * 1024;
@@ -95,7 +97,7 @@ export default {
               service: SERVICE_NAME,
               workerVersion: WORKER_VERSION,
               requiredDatabaseVersion: DATABASE_VERSION,
-              apiStage: "SHUTTLE-3",
+              apiStage: "SHUTTLE-5",
             },
             200,
             corsOrigin,
@@ -139,6 +141,14 @@ export default {
 
         case "POST /v1/system/check":
           return await handleSystemCheck(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/demo/prepare":
+          return await handleDemoPrepare(
             request,
             env,
             corsOrigin,
@@ -682,6 +692,7 @@ async function handleSystemCheck(
     phoneA,
     phoneB,
     phoneC,
+    demoStatus,
   ] = await Promise.all([
     supabaseRpc(env, "shuttle_schema_check", {}),
     supabaseRequest(
@@ -697,6 +708,11 @@ async function handleSystemCheck(
     supabaseRpc(env, "shuttle_normalize_phone", {
       p_phone: "+81 90 1234 5678",
     }),
+    facility.environment === "demo"
+      ? supabaseRpc(env, "shuttle_demo_status", {
+          p_facility_id: facility.id,
+        })
+      : Promise.resolve(null),
   ]);
 
   const settings = Array.isArray(settingsRows)
@@ -730,17 +746,25 @@ async function handleSystemCheck(
     typeof env.LINE_CHANNEL_ID === "string" &&
     /^[0-9]{5,20}$/.test(env.LINE_CHANNEL_ID);
   const rateLimitConfigured = Boolean(env.RATE_LIMITER);
+  const demoDataOk =
+    facility.environment !== "demo" ||
+    (
+      demoStatus &&
+      demoStatus.ok === true &&
+      demoStatus.prepared === true
+    );
   const requiredOk =
     databaseOk &&
     facilitySettingsOk &&
     phoneNormalizationOk &&
-    productionGuardOk;
+    productionGuardOk &&
+    demoDataOk;
 
   return successResponse(
     {
       systemCheck: {
         ok: requiredOk,
-        stage: "SHUTTLE-3",
+        stage: "SHUTTLE-5",
         checkedAt: new Date().toISOString(),
         worker: {
           status: "pass",
@@ -776,6 +800,30 @@ async function handleSystemCheck(
         productionGuard: {
           status: productionGuardOk ? "pass" : "fail",
         },
+        demoData: {
+          status:
+            facility.environment !== "demo"
+              ? "not_applicable"
+              : demoDataOk
+                ? "pass"
+                : "pending",
+          version: DEMO_PREPARE_VERSION,
+          prepared:
+            facility.environment === "demo"
+              ? demoStatus?.prepared === true
+              : null,
+          duplicateSafe:
+            facility.environment === "demo"
+              ? demoStatus?.duplicate_safe === true
+              : null,
+          staffCount: demoStatus?.staff_count ?? null,
+          vehicleCount: demoStatus?.vehicle_count ?? null,
+          riderCount: demoStatus?.rider_count ?? null,
+          locationCount: demoStatus?.location_count ?? null,
+          scheduleCount: demoStatus?.schedule_count ?? null,
+          dispatcherLoginReady:
+            demoStatus?.dispatcher_login_ready ?? null,
+        },
         browserCors: {
           status: corsConfigured ? "pass" : "pending",
           requiredBeforeFrontendPublication: true,
@@ -799,12 +847,108 @@ async function handleSystemCheck(
           changeRequests: true,
           optimisticLocking: true,
           idempotencyKeys: true,
+          demoPrepare: true,
         },
       },
     },
     200,
     corsOrigin,
     requestId
+  );
+}
+
+async function handleDemoPrepare(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  assertBaseConfiguration(env, { requireSession: true });
+  const body = await readJsonObject(request, { allowEmpty: true });
+  const session = await requireSession(request, env, ["admin"]);
+  await enforceRateLimit(request, env, "demo-prepare", session);
+
+  const facility = await findFacilityById(env, session.facilityId);
+  assertFacilityEnvironment(facility, env);
+
+  if (
+    env.PRODUCTION_GUARD !== "enabled" ||
+    env.APP_ENVIRONMENT !== "demo" ||
+    facility.environment !== "demo"
+  ) {
+    throw new AppError(
+      403,
+      "DEMO_PREPARE_FORBIDDEN",
+      "本番事業所ではデモデータを準備できません。"
+    );
+  }
+
+  return await runIdempotentOperation(
+    request,
+    env,
+    session,
+    "demo-prepare",
+    body,
+    corsOrigin,
+    requestId,
+    async () => {
+      const pinHash = await hashPbkdf2Pin(DEMO_STAFF_PIN);
+      const demoData = await supabaseRpc(
+        env,
+        "shuttle_demo_prepare",
+        {
+          p_facility_id: facility.id,
+          p_staff_pin_hash: pinHash,
+        }
+      );
+
+      if (
+        !demoData ||
+        demoData.ok !== true ||
+        demoData.prepared !== true
+      ) {
+        throw new AppError(
+          502,
+          "DEMO_PREPARE_INCOMPLETE",
+          "デモデータの準備結果を確認できませんでした。再度お試しください。"
+        );
+      }
+
+      await writeAuditLog(env, {
+        facilityId: facility.id,
+        actorType: session.actorType,
+        actorId: session.actorId,
+        action: "demo_prepare_api",
+        entityType: "facility",
+        entityId: facility.id,
+        requestId,
+        request,
+        newData: {
+          version: DEMO_PREPARE_VERSION,
+          duplicateSafe: true,
+        },
+      });
+
+      return {
+        status: 200,
+        payload: {
+          demoData: {
+            version:
+              demoData.version ||
+              DEMO_PREPARE_VERSION,
+            prepared: true,
+            duplicateSafe:
+              demoData.duplicate_safe === true,
+            counts: demoData.counts || {},
+          },
+          demoStaff: {
+            loginId: "demo.dispatcher",
+            pin: DEMO_STAFF_PIN,
+            role: "dispatcher",
+          },
+        },
+      };
+    }
   );
 }
 
@@ -5667,6 +5811,7 @@ function routeNotFoundResponse(
     "/v1/auth/member": ["POST"],
     "/v1/auth/logout": ["POST"],
     "/v1/system/check": ["POST"],
+    "/v1/demo/prepare": ["POST"],
     "/v1/staff": ["GET", "POST"],
     "/v1/vehicles": ["GET", "POST"],
     "/v1/riders": ["GET", "POST"],

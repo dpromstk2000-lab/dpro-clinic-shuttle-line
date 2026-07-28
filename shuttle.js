@@ -29,7 +29,8 @@
       staff: [],
       vehicles: [],
       changeRequests: [],
-      systemCheck: null
+      systemCheck: null,
+      demoPrepare: null
     }
   };
 
@@ -617,17 +618,51 @@
     if (path === "/v1/runs/generate" && method === "POST") {
       return Promise.resolve({ ok: true, generated: { created: 8 }, serviceDate: options.body.serviceDate, runs });
     }
+    if (path === "/v1/demo/prepare" && method === "POST") {
+      return Promise.resolve({
+        ok: true,
+        demoData: {
+          version: "SHUTTLE-5-DEMO-20260728",
+          prepared: true,
+          duplicateSafe: true,
+          counts: {
+            staff: 2,
+            vehicles: 2,
+            riders: 4,
+            locations: 5,
+            regular_schedules: 40
+          }
+        },
+        demoStaff: {
+          loginId: "demo.dispatcher",
+          pin: "5678",
+          role: "dispatcher"
+        }
+      });
+    }
     if (path === "/v1/system/check" && method === "POST") {
       return Promise.resolve({
         ok: true,
         systemCheck: {
           ok: true,
-          stage: "SHUTTLE-4",
-          worker: { status: "pass", version: "SHUTTLE-3-WORKER-20260728" },
+          stage: "SHUTTLE-5",
+          worker: { status: "pass", version: "SHUTTLE-5-WORKER-20260728" },
           database: { status: "pass", version: "SHUTTLE-1-DB-20260727", missingTables: [], missingRpcs: [], rlsDisabledTables: [], constraintCount: 155, indexCount: 65 },
           facility: { status: "pass", facilityCode: config.facilityCode, environment: "demo", scheduleStepMinutes: 5, businessStartTime: "07:00:00", businessEndTime: "20:00:00" },
           phoneNormalization: { status: "pass", normalizedValue: "09012345678" },
           productionGuard: { status: "pass" },
+          demoData: {
+            status: "pass",
+            version: "SHUTTLE-5-DEMO-20260728",
+            prepared: true,
+            duplicateSafe: true,
+            staffCount: 2,
+            vehicleCount: 2,
+            riderCount: 4,
+            locationCount: 5,
+            scheduleCount: 40,
+            dispatcherLoginReady: true
+          },
           browserCors: { status: "pass" },
           lineMemberAuthentication: { status: "pending", requiredAtStep: "SHUTTLE-7" },
           rateLimiting: { status: "recommended" },
@@ -947,6 +982,8 @@
       if (run) openRunDetail(run);
     } else if (action === "run-system-check") {
       await runSystemCheck(actionButton);
+    } else if (action === "prepare-demo") {
+      await prepareDemo(actionButton);
     } else if (action === "search-riders") {
       await loadRiders(String(document.getElementById("rider-search")?.value || ""));
       renderRiders();
@@ -1440,6 +1477,10 @@
   function renderSystem() {
     const content = document.getElementById("main-content");
     const check = state.data.systemCheck;
+    const demoPrepare = state.data.demoPrepare;
+    const canPrepareDemo =
+      state.role === "admin" &&
+      config.environment === "demo";
     content.innerHTML = `
       <section class="content-header">
         <div>
@@ -1450,6 +1491,34 @@
           <button type="button" class="button" data-action="run-system-check">一括検査を実行</button>
         </div>
       </section>
+      ${canPrepareDemo ? `
+        <section class="panel">
+          <header class="panel-header">
+            <div>
+              <h2 class="panel-title">デモ環境の準備</h2>
+              <p class="panel-subtitle">架空の利用者4名、スタッフ2名、車両2台、平日の定期予定40件を重複なく準備します。</p>
+            </div>
+            ${statusBadge(
+              demoPrepare?.prepared
+                ? "approved"
+                : check?.demoData?.prepared
+                  ? "approved"
+                  : "warning",
+              {
+                approved: "準備済み",
+                warning: "未準備"
+              }
+            )}
+          </header>
+          <div class="record-details">
+            <div class="record-line"><span class="record-label">配車担当ログインID</span><span class="record-value">demo.dispatcher</span></div>
+            <div class="record-line"><span class="record-label">デモ暗証番号</span><span class="record-value">5678</span></div>
+            <div class="record-line"><span class="record-label">重複防止</span><span class="record-value">同じ操作を再実行しても追加重複しません</span></div>
+          </div>
+          <div class="action-row">
+            <button type="button" class="button" data-action="prepare-demo">デモデータを準備</button>
+          </div>
+        </section>` : ""}
       ${check ? renderSystemCheckResult(check) : `
         <section class="panel">
           ${emptyState("✓", "まだ検査を実行していません", "「一括検査を実行」を押すと、Worker・DB・電話番号正規化・production_guardなどを確認します。", '<button type="button" class="button" data-action="run-system-check">一括検査を実行</button>')}
@@ -1465,6 +1534,7 @@
       ["事業所設定", check.facility?.status, `${check.facility?.businessStartTime || "―"}～${check.facility?.businessEndTime || "―"}／${check.facility?.scheduleStepMinutes || "―"}分単位`],
       ["電話番号正規化", check.phoneNormalization?.status, check.phoneNormalization?.normalizedValue],
       ["production_guard", check.productionGuard?.status, check.facility?.environment],
+      ["デモデータ", check.demoData?.status, check.demoData?.prepared ? `スタッフ ${check.demoData?.staffCount || 0}名／車両 ${check.demoData?.vehicleCount || 0}台／利用者 ${check.demoData?.riderCount || 0}名／定期予定 ${check.demoData?.scheduleCount || 0}件` : "システム確認からデモデータを準備してください"],
       ["ブラウザCORS", check.browserCors?.status, check.browserCors?.status === "pass" ? "許可元設定済み" : "フロント公開前に設定"],
       ["LINE会員認証", check.lineMemberAuthentication?.status, check.lineMemberAuthentication?.requiredAtStep || "SHUTTLE-7"],
       ["レート制限", check.rateLimiting?.status, check.rateLimiting?.status === "pass" ? "設定済み" : "本番前に推奨"]
@@ -1479,7 +1549,7 @@
           <table class="data-table">
             <thead><tr><th>検査項目</th><th>結果</th><th>確認内容</th></tr></thead>
             <tbody>
-              ${rows.map(([label, status, detail]) => `<tr><td class="cell-primary" data-label="検査項目"><span class="primary-cell">${escapeHtml(label)}</span></td><td data-label="結果">${statusBadge(status === "pass" ? "approved" : status === "pending" || status === "recommended" ? "warning" : "danger", { approved: "合格", warning: status === "recommended" ? "推奨" : "保留", danger: "不合格" })}</td><td data-label="確認内容">${escapeHtml(detail || "―")}</td></tr>`).join("")}
+              ${rows.map(([label, status, detail]) => `<tr><td class="cell-primary" data-label="検査項目"><span class="primary-cell">${escapeHtml(label)}</span></td><td data-label="結果">${statusBadge(status === "pass" ? "approved" : status === "pending" || status === "recommended" || status === "not_applicable" ? "warning" : "danger", { approved: "合格", warning: status === "recommended" ? "推奨" : status === "not_applicable" ? "対象外" : "保留", danger: "不合格" })}</td><td data-label="確認内容">${escapeHtml(detail || "―")}</td></tr>`).join("")}
             </tbody>
           </table>
         </div>
@@ -2008,6 +2078,51 @@
       showToast("当日の送迎便を生成しました。同じ内容は二重作成されません。");
     } catch (error) {
       showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function prepareDemo(button) {
+    if (
+      state.role !== "admin" ||
+      config.environment !== "demo"
+    ) {
+      showToast(
+        "デモデータの準備は、デモ環境へ管理者でログインした場合だけ実行できます。",
+        "warning"
+      );
+      return;
+    }
+    const confirmed = window.confirm(
+      "架空の利用者・スタッフ・車両・定期予定を準備します。\n同じ操作を再実行しても重複登録されません。実行しますか？"
+    );
+    if (!confirmed) return;
+    setBusy(button, true, "準備中…");
+    try {
+      const result = await api("/v1/demo/prepare", {
+        method: "POST",
+        body: {}
+      });
+      state.data.demoPrepare = result.demoData || null;
+      const checkResult = await api("/v1/system/check", {
+        method: "POST",
+        body: {},
+        idempotent: false
+      });
+      state.data.systemCheck = checkResult.systemCheck;
+      renderSystem();
+      showToast(
+        `デモデータを準備しました。スタッフIDは「${result.demoStaff?.loginId || "demo.dispatcher"}」、暗証番号は「${result.demoStaff?.pin || "5678"}」です。`,
+        "success",
+        "demo-prepare"
+      );
+    } catch (error) {
+      showToast(
+        friendlyError(error),
+        "error",
+        "demo-prepare"
+      );
     } finally {
       setBusy(button, false);
     }
