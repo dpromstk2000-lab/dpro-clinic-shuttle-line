@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="robots" content="noindex,nofollow">
+  <title>DPRO 福祉施設送迎｜システム一括検査</title>
+  <script src="config.js" defer></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --primary: #0f766e;
+      --primary-dark: #115e59;
+      --primary-soft: #ccfbf1;
+      --ink: #17212b;
+      --muted: #5f6b76;
+      --line: #d9e2e7;
+      --surface: #ffffff;
+      --surface-soft: #f5f8f8;
+      --good: #0f766e;
+      --good-soft: #ecfdf5;
+      --warn: #9a6700;
+      --warn-soft: #fff8e6;
+      --danger: #b42318;
+      --danger-soft: #fff1f0;
+      --shadow: 0 18px 50px rgba(15, 62, 58, 0.10);
+      font-family: "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--surface-soft); }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(20,184,166,.12), transparent 34rem),
+        var(--surface-soft);
+      line-height: 1.65;
+    }
+    button, input { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    a { color: inherit; }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(255,255,255,.94);
+      border-bottom: 1px solid rgba(217,226,231,.85);
+      backdrop-filter: blur(14px);
+    }
+    .header-inner {
+      width: min(1120px, calc(100% - 32px));
+      min-height: 72px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 13px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--primary);
+      box-shadow: 0 9px 22px rgba(15,118,110,.22);
+      font-weight: 900;
+    }
+    .brand strong, .brand small { display: block; }
+    .brand strong { font-size: 15px; }
+    .brand small { color: var(--muted); font-size: 11px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .environment-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      color: var(--primary-dark);
+      background: var(--primary-soft);
+      border: 1px solid #99f6e4;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 7px 13px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 13px;
+    }
+    main {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 46px 0 80px;
+    }
+    .hero {
+      padding: clamp(28px, 5vw, 50px);
+      border-radius: 28px;
+      color: #fff;
+      background:
+        radial-gradient(circle at 92% 0%, rgba(255,255,255,.13), transparent 18rem),
+        linear-gradient(135deg, #075e55, #0f766e);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: #99f6e4;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .12em;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    .hero h1 {
+      margin-bottom: 12px;
+      font-size: clamp(28px, 5vw, 48px);
+      line-height: 1.25;
+    }
+    .hero p:last-child { margin-bottom: 0; max-width: 720px; }
+    .section { margin-top: 34px; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 12px 32px rgba(15,62,58,.06);
+      overflow: hidden;
+    }
+    .panel-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 22px;
+      padding: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-header h2 { margin-bottom: 4px; font-size: 23px; }
+    .panel-header p { margin-bottom: 0; color: var(--muted); font-size: 14px; }
+    .panel-body { padding: 24px; }
+    .login-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .field label {
+      display: block;
+      margin-bottom: 7px;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .field input {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 13px;
+      border: 1px solid #bdcbd1;
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .field input:focus {
+      outline: 3px solid rgba(20,184,166,.18);
+      border-color: var(--primary);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .button {
+      min-height: 46px;
+      padding: 10px 18px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      color: #fff;
+      background: var(--primary);
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .button:hover { background: var(--primary-dark); }
+    .button:disabled { opacity: .58; cursor: wait; }
+    .button.secondary {
+      color: var(--primary-dark);
+      background: #fff;
+      border-color: #9fd7d1;
+    }
+    .button.danger {
+      color: var(--danger);
+      background: #fff;
+      border-color: #efb5b0;
+    }
+    .notice {
+      margin: 0 0 18px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: var(--warn-soft);
+      border: 1px solid #f3d493;
+      color: #6b4b00;
+      font-size: 14px;
+    }
+    .notice.error {
+      color: var(--danger);
+      background: var(--danger-soft);
+      border-color: #efb5b0;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .summary-card {
+      min-height: 118px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+    }
+    .summary-card span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .summary-card strong { display: block; margin-top: 8px; font-size: 25px; line-height: 1.3; }
+    .summary-card.good { background: var(--good-soft); border-color: #a7e3d4; }
+    .summary-card.warn { background: var(--warn-soft); border-color: #f3d493; }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+    th, td {
+      padding: 14px 15px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+    th {
+      color: var(--muted);
+      background: #f8fafb;
+      font-size: 12px;
+      letter-spacing: .02em;
+    }
+    tr:last-child td { border-bottom: 0; }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 64px;
+      min-height: 28px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .status.pass { color: var(--good); background: var(--good-soft); border: 1px solid #a7e3d4; }
+    .status.pending, .status.recommended, .status.not_applicable {
+      color: var(--warn);
+      background: var(--warn-soft);
+      border: 1px solid #f3d493;
+    }
+    .status.fail { color: var(--danger); background: var(--danger-soft); border: 1px solid #efb5b0; }
+    .empty {
+      padding: 46px 24px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--ink);
+      font-size: 20px;
+    }
+    .account {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      margin-bottom: 18px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: #effaf8;
+      color: #28534e;
+      font-size: 13px;
+    }
+    .account strong { color: var(--primary-dark); }
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      margin-right: 8px;
+      border: 2px solid rgba(255,255,255,.45);
+      border-top-color: #fff;
+      border-radius: 50%;
+      vertical-align: -3px;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .footer {
+      padding: 28px 16px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--line);
+      background: #fff;
+    }
+    [hidden] { display: none !important; }
+    @media (max-width: 720px) {
+      .header-inner { width: min(100% - 20px, 1120px); min-height: 64px; }
+      .brand small, .back-link { display: none; }
+      main { width: min(100% - 20px, 1120px); padding-top: 22px; }
+      .hero { border-radius: 20px; }
+      .panel-header { display: block; padding: 20px; }
+      .panel-header .actions { margin-top: 14px; }
+      .panel-body { padding: 18px; }
+      .login-grid, .summary { grid-template-columns: 1fr; }
+      .actions .button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./?demo=1" aria-label="利用開始ポータルへ戻る">
+        <span class="brand-mark" aria-hidden="true">検</span>
+        <span>
+          <strong>DPRO 福祉施設送迎</strong>
+          <small>システム一括検査</small>
+        </span>
+      </a>
+      <div class="header-actions">
+        <a class="back-link" href="./?demo=1">ポータルへ戻る</a>
+        <span id="environment-badge" class="environment-badge">確認中</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">SYSTEM CHECK</p>
+      <h1>システム一括検査</h1>
+      <p>Worker、データベース、RLS、電話番号正規化、公開設定、デモデータをまとめて確認します。</p>
+    </section>
+
+    <section id="login-section" class="section panel">
+      <header class="panel-header">
+        <div>
+          <h2>管理者ログイン</h2>
+          <p>検査を実行するには、事業所コードと管理コードが必要です。</p>
+        </div>
+      </header>
+      <div class="panel-body">
+        <div id="login-error" class="notice error" hidden></div>
+        <form id="login-form" novalidate>
+          <div class="login-grid">
+            <div class="field">
+              <label for="facility-code">事業所コード</label>
+              <input id="facility-code" name="facilityCode" required maxlength="80" autocomplete="organization">
+            </div>
+            <div class="field">
+              <label for="management-code">管理コード</label>
+              <input id="management-code" name="managementCode" type="password" required maxlength="128" autocomplete="current-password">
+            </div>
+          </div>
+          <div class="actions">
+            <button id="login-button" class="button" type="submit">ログインして検査する</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="check-section" class="section" hidden>
+      <div id="account-box" class="account"></div>
+
+      <div class="summary">
+        <article id="summary-required" class="summary-card">
+          <span>必須項目</span>
+          <strong>未実行</strong>
+        </article>
+        <article class="summary-card">
+          <span>Worker版</span>
+          <strong id="summary-worker">―</strong>
+        </article>
+        <article class="summary-card">
+          <span>Database版</span>
+          <strong id="summary-database">―</strong>
+        </article>
+      </div>
+
+      <section class="panel">
+        <header class="panel-header">
+          <div>
+            <h2>検査結果</h2>
+            <p id="checked-at">「一括検査を実行」を押してください。</p>
+          </div>
+          <div class="actions" style="margin-top:0">
+            <button id="run-check" class="button" type="button">一括検査を実行</button>
+            <button id="prepare-demo" class="button secondary" type="button" hidden>デモデータを準備</button>
+            <button id="logout-button" class="button danger" type="button">ログアウト</button>
+          </div>
+        </header>
+        <div id="check-error" class="notice error" style="margin:20px 20px 0" hidden></div>
+        <div id="result-area" class="empty">
+          <strong>まだ検査を実行していません</strong>
+          Worker・DB・電話番号正規化・production_guardなどを確認します。
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    DPRO 福祉施設送迎 LINE ／ <span id="footer-version">SHUTTLE-10-R1-CHECK-20260729</span>
+  </footer>
+
+  <script>
+  (() => {
+    "use strict";
+
+    const CHECK_VERSION = "SHUTTLE-10-R1-CHECK-20260729";
+    const SESSION_SUFFIX = "_system_check";
+    const loginSection = document.getElementById("login-section");
+    const checkSection = document.getElementById("check-section");
+    const loginForm = document.getElementById("login-form");
+    const loginButton = document.getElementById("login-button");
+    const runCheckButton = document.getElementById("run-check");
+    const prepareDemoButton = document.getElementById("prepare-demo");
+    const logoutButton = document.getElementById("logout-button");
+    const resultArea = document.getElementById("result-area");
+    const loginError = document.getElementById("login-error");
+    const checkError = document.getElementById("check-error");
+    let session = null;
+
+    function config() {
+      return window.DPRO_SHUTTLE_CONFIG || {};
+    }
+
+    function sessionKey() {
+      return `${config().sessionStorageKey || "dpro_shuttle_session_v1"}${SESSION_SUFFIX}`;
+    }
+
+    function apiBase() {
+      const base = String(config().apiBaseUrl || "").replace(/\/+$/, "");
+      if (!base.startsWith("https://")) {
+        throw new Error("API接続先が正しく設定されていません。");
+      }
+      return base;
+    }
+
+    function uuid() {
+      return globalThis.crypto?.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `check-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function saveSession(value) {
+      session = value;
+      sessionStorage.setItem(sessionKey(), JSON.stringify(value));
+    }
+
+    function loadSession() {
+      try {
+        const value = JSON.parse(sessionStorage.getItem(sessionKey()) || "null");
+        if (!value?.token || !["admin", "dispatcher"].includes(value.role)) return null;
+        return value;
+      } catch {
+        return null;
+      }
+    }
+
+    function clearSession() {
+      session = null;
+      sessionStorage.removeItem(sessionKey());
+    }
+
+    function showError(element, message) {
+      element.textContent = message;
+      element.hidden = false;
+    }
+
+    function clearError(element) {
+      element.textContent = "";
+      element.hidden = true;
+    }
+
+    function setBusy(button, busy, label) {
+      if (!button) return;
+      if (busy) {
+        button.dataset.original = button.textContent;
+        button.disabled = true;
+        button.innerHTML = `<span class="spinner" aria-hidden="true"></span>${escapeHtml(label)}`;
+      } else {
+        button.disabled = false;
+        button.textContent = button.dataset.original || button.textContent;
+      }
+    }
+
+    async function api(path, options = {}) {
+      const method = String(options.method || "GET").toUpperCase();
+      const headers = new Headers({ Accept: "application/json" });
+      if (session?.token) headers.set("Authorization", `Bearer ${session.token}`);
+      if (options.body !== undefined) headers.set("Content-Type", "application/json");
+      if (["POST", "PATCH"].includes(method) && path !== "/v1/auth/admin") {
+        headers.set("Idempotency-Key", options.idempotencyKey || uuid());
+      }
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), Number(config().requestTimeoutMs) || 12000);
+      try {
+        const response = await fetch(`${apiBase()}${path}`, {
+          method,
+          headers,
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          cache: "no-store",
+          signal: controller.signal
+        });
+        let payload = {};
+        try { payload = await response.json(); } catch { payload = {}; }
+        if (!response.ok || payload.ok === false) {
+          const error = new Error(
+            payload?.error?.message ||
+            (response.status === 401
+              ? "ログインの有効期限が切れました。もう一度ログインしてください。"
+              : `通信エラーが発生しました（${response.status}）。`)
+          );
+          error.status = response.status;
+          error.code = payload?.error?.code || "HTTP_ERROR";
+          throw error;
+        }
+        return payload;
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          throw new Error("通信に時間がかかっています。接続を確認して、もう一度お試しください。");
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
+    function statusLabel(status) {
+      return {
+        pass: "合格",
+        fail: "不合格",
+        pending: "保留",
+        recommended: "推奨",
+        not_applicable: "対象外"
+      }[status] || "要確認";
+    }
+
+    function statusBadge(status) {
+      const normalized = ["pass", "fail", "pending", "recommended", "not_applicable"].includes(status)
+        ? status
+        : "fail";
+      return `<span class="status ${normalized}">${statusLabel(normalized)}</span>`;
+    }
+
+    function detailList(values) {
+      return values.filter(Boolean).join("／") || "―";
+    }
+
+    function rowsFromCheck(check) {
+      const database = check.database || {};
+      const demo = check.demoData || {};
+      return [
+        ["Worker API", check.worker?.status, check.worker?.version],
+        ["データベース", database.status, detailList([
+          database.version,
+          `不足テーブル ${database.missingTables?.length || 0}`,
+          `不足RPC ${database.missingRpcs?.length || 0}`
+        ])],
+        ["RLS", database.rlsDisabledTables?.length ? "fail" : "pass",
+          `無効テーブル ${database.rlsDisabledTables?.length || 0}`],
+        ["事業所設定", check.facility?.status, detailList([
+          check.facility?.facilityCode,
+          check.facility?.environment,
+          check.facility?.businessStartTime && check.facility?.businessEndTime
+            ? `${check.facility.businessStartTime}～${check.facility.businessEndTime}`
+            : null,
+          check.facility?.scheduleStepMinutes != null
+            ? `${check.facility.scheduleStepMinutes}分単位`
+            : null
+        ])],
+        ["電話番号正規化", check.phoneNormalization?.status,
+          check.phoneNormalization?.normalizedValue],
+        ["production_guard", check.productionGuard?.status,
+          check.facility?.environment],
+        ["デモデータ", demo.status, demo.prepared
+          ? detailList([
+              `スタッフ ${demo.staffCount ?? 0}名`,
+              `車両 ${demo.vehicleCount ?? 0}台`,
+              `利用者 ${demo.riderCount ?? 0}名`,
+              `定期予定 ${demo.scheduleCount ?? 0}件`
+            ])
+          : "デモデータが未準備です"],
+        ["家族デモポータル",
+          demo.memberLoginReady ? "pass" : (check.facility?.environment === "demo" ? "pending" : "not_applicable"),
+          demo.memberLoginReady
+            ? `家族 ${demo.guardianCount ?? 0}名／紐づけ ${demo.guardianLinkCount ?? 0}件`
+            : "家族デモの準備状態を確認してください"],
+        ["ブラウザCORS", check.browserCors?.status,
+          check.browserCors?.status === "pass" ? "許可元設定済み" : "公開前に設定が必要です"],
+        ["LINE会員認証", check.lineMemberAuthentication?.status,
+          check.lineMemberAuthentication?.configured
+            ? "LINE Channel ID設定済み"
+            : `${check.lineMemberAuthentication?.requiredAtStep || "本番導入前"}に設定`],
+        ["レート制限", check.rateLimiting?.status,
+          check.rateLimiting?.status === "pass" ? "RATE_LIMITER設定済み" : "本番前に推奨"],
+        ["運用API", check.operationalApi?.status,
+          "利用者・家族・定期予定・便・乗降記録・変更依頼"]
+      ];
+    }
+
+    function renderCheck(check) {
+      const rows = rowsFromCheck(check);
+      const summaryRequired = document.getElementById("summary-required");
+      summaryRequired.className = `summary-card ${check.ok ? "good" : "warn"}`;
+      summaryRequired.querySelector("strong").textContent = check.ok ? "合格" : "要確認";
+      document.getElementById("summary-worker").textContent = check.worker?.version || "―";
+      document.getElementById("summary-database").textContent = check.database?.version || "―";
+      document.getElementById("checked-at").textContent = check.checkedAt
+        ? `検査日時：${new Intl.DateTimeFormat("ja-JP", {
+            timeZone: "Asia/Tokyo",
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", second: "2-digit"
+          }).format(new Date(check.checkedAt))}`
+        : "検査を実行しました。";
+      resultArea.className = "table-wrap";
+      resultArea.innerHTML = `
+        <table>
+          <thead><tr><th>検査項目</th><th>結果</th><th>確認内容</th></tr></thead>
+          <tbody>
+            ${rows.map(([label, status, detail]) => `
+              <tr>
+                <td><strong>${escapeHtml(label)}</strong></td>
+                <td>${statusBadge(status)}</td>
+                <td>${escapeHtml(detail || "―")}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    function renderAuthenticated() {
+      loginSection.hidden = true;
+      checkSection.hidden = false;
+      const facility = session?.facility || {};
+      document.getElementById("account-box").innerHTML = `
+        <span><strong>事業所：</strong>${escapeHtml(facility.facilityName || facility.facilityCode || "DPRO 福祉施設送迎")}</span>
+        <span><strong>権限：</strong>${escapeHtml(session?.role === "admin" ? "管理者" : "配車担当")}</span>
+        <span><strong>環境：</strong>${escapeHtml(facility.environment || config().environment || "―")}</span>`;
+      prepareDemoButton.hidden = !(
+        session?.role === "admin" &&
+        (facility.environment === "demo" || config().environment === "demo")
+      );
+    }
+
+    function renderLogin() {
+      checkSection.hidden = true;
+      loginSection.hidden = false;
+      const cfg = config();
+      const facilityInput = document.getElementById("facility-code");
+      const codeInput = document.getElementById("management-code");
+      facilityInput.value = cfg.facilityCode || "";
+      if (cfg.environment === "demo") codeInput.value = "1234";
+      facilityInput.focus();
+    }
+
+    async function runCheck() {
+      clearError(checkError);
+      setBusy(runCheckButton, true, "検査中…");
+      try {
+        const payload = await api("/v1/system/check", {
+          method: "POST",
+          body: {}
+        });
+        renderCheck(payload.systemCheck || {});
+      } catch (error) {
+        if (error?.status === 401) {
+          clearSession();
+          renderLogin();
+          showError(loginError, error.message);
+          return;
+        }
+        showError(checkError, error?.message || "一括検査を実行できませんでした。");
+      } finally {
+        setBusy(runCheckButton, false, "");
+      }
+    }
+
+    async function prepareDemo() {
+      clearError(checkError);
+      setBusy(prepareDemoButton, true, "準備中…");
+      try {
+        await api("/v1/demo/prepare", {
+          method: "POST",
+          body: {},
+          idempotencyKey: uuid()
+        });
+        await runCheck();
+      } catch (error) {
+        showError(checkError, error?.message || "デモデータを準備できませんでした。");
+      } finally {
+        setBusy(prepareDemoButton, false, "");
+      }
+    }
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError(loginError);
+      const values = new FormData(loginForm);
+      const facilityCode = String(values.get("facilityCode") || "").trim();
+      const managementCode = String(values.get("managementCode") || "").trim();
+      if (!facilityCode || !managementCode) {
+        showError(loginError, "事業所コードと管理コードを入力してください。");
+        return;
+      }
+      setBusy(loginButton, true, "ログイン中…");
+      try {
+        session = null;
+        const payload = await api("/v1/auth/admin", {
+          method: "POST",
+          body: { facilityCode, managementCode }
+        });
+        saveSession({
+          token: payload.token,
+          role: payload.role,
+          facility: payload.facility
+        });
+        renderAuthenticated();
+        await runCheck();
+      } catch (error) {
+        clearSession();
+        showError(loginError, error?.message || "ログインできませんでした。");
+      } finally {
+        setBusy(loginButton, false, "");
+      }
+    });
+
+    runCheckButton.addEventListener("click", runCheck);
+    prepareDemoButton.addEventListener("click", prepareDemo);
+    logoutButton.addEventListener("click", () => {
+      clearSession();
+      resultArea.className = "empty";
+      resultArea.innerHTML = "<strong>まだ検査を実行していません</strong>Worker・DB・電話番号正規化・production_guardなどを確認します。";
+      renderLogin();
+    });
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const cfg = config();
+      const isDemo = cfg.environment === "demo" || new URLSearchParams(location.search).get("demo") === "1";
+      document.getElementById("environment-badge").textContent = isDemo ? "DEMO 環境" : "本番環境";
+      document.getElementById("footer-version").textContent = `${CHECK_VERSION} ／ ${cfg.version || "SHUTTLE-9"}`;
+      document.querySelectorAll('a[href="./?demo=1"]').forEach((link) => {
+        link.href = isDemo ? "./?demo=1" : "./";
+      });
+      session = loadSession();
+      if (session) {
+        renderAuthenticated();
+        runCheck();
+      } else {
+        renderLogin();
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
