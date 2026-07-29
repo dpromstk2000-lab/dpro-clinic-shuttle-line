@@ -1,0 +1,191 @@
+name: STEP DPRO-SYSTEMS-4 Shuttle Operation Demo
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/step-dpro-systems-4-shuttle-operation-demo.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clarify shuttle operation demo
+        shell: python
+        run: |
+          from pathlib import Path
+          import base64
+          import re
+
+          html_path = Path("index.html")
+          css_path = Path("portal.css")
+          html = html_path.read_text(encoding="utf-8")
+          css = css_path.read_text(encoding="utf-8")
+
+          notice = base64.b64decode("PHNlY3Rpb24gY2xhc3M9Im9wZXJhdGlvbi1kZW1vLW5vdGljZSIgYXJpYS1sYWJlbD0i5pON5L2c44OH44Oi44Gu5qGI5YaFIj4KICA8ZGl2PgogICAgPHNtYWxsPk9QRVJBVElPTiBERU1PPC9zbWFsbD4KICAgIDxzdHJvbmc+44GT44KM44Gv5a6f6Zqb44Gu55S76Z2i44KS6Kmm44GZ44Gf44KB44Gu5YWs6ZaL5pON5L2c44OH44Oi44Gn44GZPC9zdHJvbmc+CiAgICA8c3Bhbj7mqZ/og73jg7vlsI7lhaXlirnmnpzjg7vmlpnph5HjgpLoqq3jgoDlhazlvI/ntLnku4vjg5rjg7zjgrjjgajjga/liKXjga7jgIHlrrbml4/jg7vnrqHnkIbogIXjg7vjgrnjgr/jg4Pjg5XnlLvpnaLjga7kvZPpqJPlhaXlj6PjgafjgZnjgII8L3NwYW4+CiAgPC9kaXY+CiAgPGEgaHJlZj0iaHR0cHM6Ly9kcHJvLXNob3AuY29tL3N5c3RlbXMvc2h1dHRsZSI+5YWs5byP44Gu5qmf6IO96Kqs5piO44KS6KaL44KLPC9hPgo8L3NlY3Rpb24+").decode("utf-8")
+          safety_list = base64.b64decode("PHVsPgogIDxsaT7jgZPjga7lhazplovjg4fjg6Ljga/mnrbnqbrjga7kuovmpa3miYDjg7vliKnnlKjogIXjg4fjg7zjgr/jgaDjgZHjgpLkvb/nlKjjgZfjgb7jgZnjgII8L2xpPgogIDxsaT7lrp/lnKjjgZnjgovliKnnlKjogIXlkI3jgIHkvY/miYDjgIHpm7voqbHnlarlj7fjgarjganjga7lgIvkurrmg4XloLHjga/lhaXlipvjgZfjgarjgYTjgafjgY/jgaDjgZXjgYTjgII8L2xpPgogIDxsaT7mk43kvZzntYLkuoblvozjga/lkITnlLvpnaLjgpLplonjgZjjgIHlhbHnlKjnq6/mnKvjgavjg63jgrDjgqTjg7PnirbmhYvjgpLmrovjgZXjgarjgYTjgafjgY/jgaDjgZXjgYTjgII8L2xpPgo8L3VsPg==").decode("utf-8")
+          css_append = base64.b64decode("Ci8qIERQUk8tU1lTVEVNUy00IFNIVVRUTEUgT1BFUkFUSU9OIERFTU8gKi8KLm9wZXJhdGlvbi1kZW1vLXBhZ2UgLmhlYWRlci1hY3Rpb25zewogIGRpc3BsYXk6ZmxleDsKICBhbGlnbi1pdGVtczpjZW50ZXI7CiAganVzdGlmeS1jb250ZW50OmZsZXgtZW5kOwogIGZsZXgtd3JhcDp3cmFwOwogIGdhcDoxMHB4Owp9Ci5vcGVyYXRpb24tZGVtby1wYWdlIC5vZmZpY2lhbC1yZXR1cm4tbGlua3sKICBtaW4taGVpZ2h0OjM4cHg7CiAgZGlzcGxheTppbmxpbmUtZmxleDsKICBhbGlnbi1pdGVtczpjZW50ZXI7CiAganVzdGlmeS1jb250ZW50OmNlbnRlcjsKICBwYWRkaW5nOjdweCAxNHB4OwogIGJvcmRlci1yYWRpdXM6OTk5cHg7CiAgY29sb3I6I2ZmZjsKICBiYWNrZ3JvdW5kOnZhcigtLXByaW1hcnkpOwogIHRleHQtZGVjb3JhdGlvbjpub25lOwogIGZvbnQtc2l6ZToxMnB4OwogIGZvbnQtd2VpZ2h0OjkwMDsKICBib3gtc2hhZG93OjAgOXB4IDIycHggcmdiYSgxNSwxMTgsMTEwLC4xOCk7Cn0KLm9wZXJhdGlvbi1kZW1vLXBhZ2UgLm9wZXJhdGlvbi1kZW1vLW5vdGljZXsKICB3aWR0aDptaW4oMTE4MHB4LGNhbGMoMTAwJSAtIDQwcHgpKTsKICBtYXJnaW46MjRweCBhdXRvIDA7CiAgcGFkZGluZzoxOHB4IDIwcHg7CiAgZGlzcGxheTpmbGV4OwogIGFsaWduLWl0ZW1zOmNlbnRlcjsKICBqdXN0aWZ5LWNvbnRlbnQ6c3BhY2UtYmV0d2VlbjsKICBnYXA6MjJweDsKICBib3JkZXI6MXB4IHNvbGlkICNiZGU4ZGY7CiAgYm9yZGVyLXJhZGl1czoyMHB4OwogIGJhY2tncm91bmQ6bGluZWFyLWdyYWRpZW50KDEzNWRlZywjZjdmY2ZiLCNlOWY4ZjQpOwogIGJveC1zaGFkb3c6MCAxNHB4IDM0cHggcmdiYSgxNSw2Miw1OCwuMDcpOwp9Ci5vcGVyYXRpb24tZGVtby1wYWdlIC5vcGVyYXRpb24tZGVtby1ub3RpY2U+ZGl2ewogIGRpc3BsYXk6ZmxleDsKICBmbGV4LWRpcmVjdGlvbjpjb2x1bW47Cn0KLm9wZXJhdGlvbi1kZW1vLXBhZ2UgLm9wZXJhdGlvbi1kZW1vLW5vdGljZSBzbWFsbHsKICBjb2xvcjp2YXIoLS1wcmltYXJ5KTsKICBmb250LXNpemU6MTBweDsKICBmb250LXdlaWdodDoxMDAwOwogIGxldHRlci1zcGFjaW5nOi4xM2VtOwp9Ci5vcGVyYXRpb24tZGVtby1wYWdlIC5vcGVyYXRpb24tZGVtby1ub3RpY2Ugc3Ryb25newogIG1hcmdpbi10b3A6M3B4OwogIGZvbnQtc2l6ZToxOHB4OwogIGxpbmUtaGVpZ2h0OjEuNDsKfQoub3BlcmF0aW9uLWRlbW8tcGFnZSAub3BlcmF0aW9uLWRlbW8tbm90aWNlIHNwYW57CiAgbWFyZ2luLXRvcDo0cHg7CiAgY29sb3I6dmFyKC0tbXV0ZWQpOwogIGZvbnQtc2l6ZToxM3B4OwogIGZvbnQtd2VpZ2h0OjcwMDsKfQoub3BlcmF0aW9uLWRlbW8tcGFnZSAub3BlcmF0aW9uLWRlbW8tbm90aWNlIGF7CiAgZmxleDowIDAgYXV0bzsKICBtaW4taGVpZ2h0OjQ0cHg7CiAgZGlzcGxheTppbmxpbmUtZmxleDsKICBhbGlnbi1pdGVtczpjZW50ZXI7CiAganVzdGlmeS1jb250ZW50OmNlbnRlcjsKICBwYWRkaW5nOjlweCAxNnB4OwogIGJvcmRlci1yYWRpdXM6OTk5cHg7CiAgY29sb3I6I2ZmZjsKICBiYWNrZ3JvdW5kOnZhcigtLXByaW1hcnkpOwogIHRleHQtZGVjb3JhdGlvbjpub25lOwogIGZvbnQtc2l6ZToxMnB4OwogIGZvbnQtd2VpZ2h0OjkwMDsKfQoub3BlcmF0aW9uLWRlbW8tcGFnZSAuaGVyb3sKICBwYWRkaW5nLXRvcDoyOHB4Owp9Ci5vcGVyYXRpb24tZGVtby1wYWdlIC5oZXJvLWlubmVyewogIGJhY2tncm91bmQ6CiAgICByYWRpYWwtZ3JhZGllbnQoY2lyY2xlIGF0IDkwJSAxMCUscmdiYSgxNTMsMjQ2LDIyOCwuMTYpLHRyYW5zcGFyZW50IDI0cmVtKSwKICAgIGxpbmVhci1ncmFkaWVudCgxMjBkZWcscmdiYSg3LDc4LDczLC45OCkscmdiYSgxNSwxMTgsMTEwLC45NCkpOwp9Ci5vcGVyYXRpb24tZGVtby1wYWdlIC5yb2xlLWdyaWR7CiAgZ3JpZC10ZW1wbGF0ZS1jb2x1bW5zOnJlcGVhdCgyLG1pbm1heCgwLDFmcikpOwp9CkBtZWRpYShtYXgtd2lkdGg6ODYwcHgpewogIC5vcGVyYXRpb24tZGVtby1wYWdlIC5yb2xlLWdyaWR7Z3JpZC10ZW1wbGF0ZS1jb2x1bW5zOjFmcn0KfQpAbWVkaWEobWF4LXdpZHRoOjYyMHB4KXsKICAub3BlcmF0aW9uLWRlbW8tcGFnZSAub3BlcmF0aW9uLWRlbW8tbm90aWNlewogICAgd2lkdGg6bWluKDEwMCUgLSAyNHB4LDExODBweCk7CiAgICBhbGlnbi1pdGVtczpmbGV4LXN0YXJ0OwogICAgZmxleC1kaXJlY3Rpb246Y29sdW1uOwogIH0KICAub3BlcmF0aW9uLWRlbW8tcGFnZSAub3BlcmF0aW9uLWRlbW8tbm90aWNlIGF7d2lkdGg6MTAwJX0KICAub3BlcmF0aW9uLWRlbW8tcGFnZSAuaGVhZGVyLWFjdGlvbnN7CiAgICB3aWR0aDoxMDAlOwogICAganVzdGlmeS1jb250ZW50OmZsZXgtc3RhcnQ7CiAgfQp9Cg==").decode("utf-8")
+
+          def replace_once(text, old, new, label):
+              if new in text:
+                  return text
+              if old not in text:
+                  raise SystemExit("ERROR: " + label + " target not found")
+              return text.replace(old, new, 1)
+
+          html = replace_once(
+              html,
+              "<title>DPRO 福祉施設送迎｜利用開始ポータル</title>",
+              "<title>DPRO 福祉施設送迎｜操作デモポータル</title>",
+              "page title"
+          )
+
+          html = replace_once(
+              html,
+              "<body>",
+              '<body class="operation-demo-page">',
+              "body class"
+          )
+
+          html = replace_once(
+              html,
+              "<small>利用開始ポータル</small>",
+              "<small>操作デモポータル</small>",
+              "brand subtitle"
+          )
+
+          old_badge = '<span id="environment-badge" class="environment-badge">確認中</span>'
+          new_badge = '<div class="header-actions"><span id="environment-badge" class="environment-badge">確認中</span><a class="official-return-link" href="https://dpro-shop.com/systems/shuttle">公式の機能説明を見る</a></div>'
+          html = replace_once(html, old_badge, new_badge, "header action")
+
+          if "これは実際の画面を試すための公開操作デモです" not in html:
+              html = replace_once(
+                  html,
+                  "<main>",
+                  "<main>\n" + notice,
+                  "operation demo notice"
+              )
+
+          html = replace_once(
+              html,
+              '<p class="eyebrow">WELFARE SHUTTLE LINE SYSTEM</p>',
+              '<p class="eyebrow">WELFARE SHUTTLE OPERATION DEMO</p>',
+              "hero eyebrow"
+          )
+
+          html = replace_once(
+              html,
+              "<h1 id=\"page-title\">使う方に合わせて<br>画面を選んでください</h1>",
+              "<h1 id=\"page-title\">家族・管理者・スタッフの<br>操作画面を体験</h1>",
+              "hero title"
+          )
+
+          html = replace_once(
+              html,
+              "管理・配車、送迎スタッフ、ご家族、営業前検査を、ひとつの入口から迷わず開けます。",
+              "ご家族の予定確認、管理・配車、運転員・添乗員の運行記録を、役割別の画面で体験できます。",
+              "hero copy"
+          )
+
+          html = re.sub(
+              r'\s*<span><strong>版</strong><span id="frontend-version">.*?</span></span>',
+              "",
+              html,
+              count=1,
+              flags=re.S
+          )
+
+          html = replace_once(
+              html,
+              "<li>デモデータ準備</li>",
+              "<li>変更依頼の確認・承認</li>",
+              "owner feature"
+          )
+
+          html, removed_check = re.subn(
+              r'\s*<article class="role-card is-check">.*?</article>',
+              "",
+              html,
+              count=1,
+              flags=re.S
+          )
+          if removed_check == 0 and "システム一括検査" in html:
+              raise SystemExit("ERROR: internal system check card was not removed")
+
+          html = replace_once(
+              html,
+              "<h2 id=\"demo-title\">デモ用ログイン情報</h2>",
+              "<h2 id=\"demo-title\">操作デモ用ログイン情報</h2>",
+              "demo login heading"
+          )
+
+          html = replace_once(
+              html,
+              "<div><strong>デモデータを準備</strong><p>「システム確認」から一度だけ実行します。再実行しても重複しません。</p></div>",
+              "<div><strong>ログイン情報を確認</strong><p>管理者・スタッフ・ご家族それぞれのデモ用番号と暗証番号を確認します。</p></div>",
+              "demo flow step two"
+          )
+
+          html = replace_once(
+              html,
+              "<h2 id=\"safety-title\">安全な運用のために</h2>",
+              "<h2 id=\"safety-title\">公開デモを安全に体験するために</h2>",
+              "safety heading"
+          )
+
+          html, safety_count = re.subn(
+              r'(<section class="section safety-section".*?<div class="safety-card">.*?</div>\s*)<ul>.*?</ul>',
+              r'\1' + safety_list,
+              html,
+              count=1,
+              flags=re.S
+          )
+          if safety_count == 0:
+              raise SystemExit("ERROR: safety list target not found")
+
+          html = replace_once(
+              html,
+              '<span id="footer-version">SHUTTLE-9-FRONTEND-20260729</span>',
+              "<span>公開操作デモ</span>",
+              "public footer"
+          )
+
+          marker = "/* DPRO-SYSTEMS-4 SHUTTLE OPERATION DEMO */"
+          if marker not in css:
+              css = css.rstrip() + "\n\n" + css_append.strip() + "\n"
+
+          html_path.write_text(html, encoding="utf-8")
+          css_path.write_text(css, encoding="utf-8")
+
+          updated_html = html_path.read_text(encoding="utf-8")
+          updated_css = css_path.read_text(encoding="utf-8")
+
+          assert 'class="operation-demo-page"' in updated_html
+          assert "操作デモポータル" in updated_html
+          assert "これは実際の画面を試すための公開操作デモです" in updated_html
+          assert "公式の機能説明を見る" in updated_html
+          assert "営業前検査" not in updated_html
+          assert "システム一括検査" not in updated_html
+          assert "system-check.html" not in updated_html
+          assert "デモデータを準備" not in updated_html
+          assert "SHUTTLE-9-FRONTEND-20260729" not in updated_html
+          assert "公開操作デモ" in updated_html
+          assert marker in updated_css
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          git config user.name "dpro-systems-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html portal.css
+          if git diff --cached --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git commit -m "STEP DPRO-SYSTEMS-4 clarify welfare shuttle operation demo"
+          git push
