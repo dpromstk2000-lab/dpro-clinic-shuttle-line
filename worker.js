@@ -3,7 +3,7 @@
  * Cloudflare Worker API
  *
  * STEP: SHUTTLE-7
- * Version: SHUTTLE-7-WORKER-20260728
+ * Version: SHUTTLE-7-R2-WORKER-20260729
  *
  * 公開ファイルへ秘密情報を記載しないこと。
  * SUPABASE_SECRET_KEY（推奨）または旧SUPABASE_SERVICE_ROLE_KEY、
@@ -11,7 +11,7 @@
  */
 
 const SERVICE_NAME = "DPRO Welfare Shuttle API";
-const WORKER_VERSION = "SHUTTLE-7-WORKER-20260728";
+const WORKER_VERSION = "SHUTTLE-7-R2-WORKER-20260729";
 const DATABASE_VERSION = "SHUTTLE-1-DB-20260727";
 const DEMO_PREPARE_VERSION = "SHUTTLE-7-DEMO-20260728";
 const DEMO_STAFF_PIN = "5678";
@@ -6343,7 +6343,10 @@ function requireIsoTimestamp(value, label) {
       `${label}の日時形式が正しくありません。`
     );
   }
-  return date.toISOString();
+  // Supabase/PostgreSQLのtimestamptzはマイクロ秒精度を返す場合がある。
+  // Date#toISOString()へ変換するとミリ秒精度に切り詰められ、
+  // updated_atの楽観ロック比較が同一値でも不一致になるため原文を保持する。
+  return value;
 }
 
 function optionalIsoTimestamp(value, label) {
