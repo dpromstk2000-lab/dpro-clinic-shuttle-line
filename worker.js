@@ -2,8 +2,8 @@
  * DPRO 福祉施設送迎 LINE
  * Cloudflare Worker API
  *
- * STEP: SHUTTLE-7
- * Version: SHUTTLE-7-R2-WORKER-20260729
+ * STEP: SHUTTLE-8
+ * Version: SHUTTLE-8-WORKER-20260729
  *
  * 公開ファイルへ秘密情報を記載しないこと。
  * SUPABASE_SECRET_KEY（推奨）または旧SUPABASE_SERVICE_ROLE_KEY、
@@ -11,7 +11,7 @@
  */
 
 const SERVICE_NAME = "DPRO Welfare Shuttle API";
-const WORKER_VERSION = "SHUTTLE-7-R2-WORKER-20260729";
+const WORKER_VERSION = "SHUTTLE-8-WORKER-20260729";
 const DATABASE_VERSION = "SHUTTLE-1-DB-20260727";
 const DEMO_PREPARE_VERSION = "SHUTTLE-7-DEMO-20260728";
 const DEMO_STAFF_PIN = "5678";
@@ -100,7 +100,7 @@ export default {
               service: SERVICE_NAME,
               workerVersion: WORKER_VERSION,
               requiredDatabaseVersion: DATABASE_VERSION,
-              apiStage: "SHUTTLE-7",
+              apiStage: "SHUTTLE-8",
             },
             200,
             corsOrigin,
@@ -1298,7 +1298,7 @@ async function handleSystemCheck(
     {
       systemCheck: {
         ok: requiredOk,
-        stage: "SHUTTLE-7",
+        stage: "SHUTTLE-8",
         checkedAt: new Date().toISOString(),
         worker: {
           status: "pass",
@@ -1373,7 +1373,10 @@ async function handleSystemCheck(
         lineMemberAuthentication: {
           status: lineConfigured ? "pass" : "pending",
           configured: lineConfigured,
-          requiredAtStep: "SHUTTLE-7",
+          requiredAtStep:
+            facility.environment === "production"
+              ? "本番導入前"
+              : "LIFF実機確認時",
           demoPortalReady:
             facility.environment === "demo"
               ? demoMemberOk
