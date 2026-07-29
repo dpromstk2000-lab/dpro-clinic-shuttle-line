@@ -2,15 +2,207 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#0f766e">
     <meta name="robots" content="noindex,nofollow">
-    <meta http-equiv="refresh" content="0; url=owner.html">
-    <title>DPRO 福祉施設送迎</title>
-    <script>
-      window.location.replace(`owner.html${window.location.search}${window.location.hash}`);
-    </script>
+    <title>DPRO 福祉施設送迎｜利用開始ポータル</title>
+    <link rel="stylesheet" href="portal.css">
+    <script src="config.js" defer></script>
+    <script src="portal.js" defer></script>
   </head>
   <body>
-    <p><a href="owner.html">DPRO 福祉施設送迎 管理・配車画面を開く</a></p>
+    <noscript>
+      <div class="noscript-message">
+        この画面を利用するにはJavaScriptを有効にしてください。
+      </div>
+    </noscript>
+
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="./" aria-label="DPRO 福祉施設送迎 利用開始ポータル">
+          <span class="brand-mark" aria-hidden="true">▰</span>
+          <span>
+            <strong>DPRO 福祉施設送迎</strong>
+            <small>利用開始ポータル</small>
+          </span>
+        </a>
+        <span id="environment-badge" class="environment-badge">確認中</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-inner">
+          <p class="eyebrow">WELFARE SHUTTLE LINE SYSTEM</p>
+          <h1 id="page-title">使う方に合わせて<br>画面を選んでください</h1>
+          <p class="hero-copy">
+            管理・配車、送迎スタッフ、ご家族、営業前検査を、ひとつの入口から迷わず開けます。
+          </p>
+          <div class="hero-meta" aria-label="システム情報">
+            <span><strong>事業所</strong><span id="facility-name">DPRO 福祉施設送迎 デモ事業所</span></span>
+            <span><strong>時間帯</strong>Asia/Tokyo</span>
+            <span><strong>版</strong><span id="frontend-version">SHUTTLE-9</span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section role-section" aria-labelledby="role-title">
+        <div class="section-heading">
+          <p class="section-kicker">入口を選ぶ</p>
+          <h2 id="role-title">役割別メニュー</h2>
+          <p>各カードを押すと、対象画面を新しいページで開きます。</p>
+        </div>
+
+        <div class="role-grid">
+          <article class="role-card is-owner">
+            <div class="role-icon" aria-hidden="true">配</div>
+            <div class="role-content">
+              <p class="role-tag">管理者・配車担当</p>
+              <h3>管理・配車画面</h3>
+              <p>当日運行、利用者、家族連携、定期予定、車両、スタッフ、変更依頼を管理します。</p>
+              <ul>
+                <li>PC向けの左メニュー</li>
+                <li>デモデータ準備</li>
+                <li>送迎便の生成・確認</li>
+              </ul>
+              <a class="primary-link" data-page="owner.html" href="owner.html">管理画面を開く</a>
+            </div>
+          </article>
+
+          <article class="role-card is-tablet">
+            <div class="role-icon" aria-hidden="true">板</div>
+            <div class="role-content">
+              <p class="role-tag">管理者・配車担当</p>
+              <h3>iPad管理画面</h3>
+              <p>タッチ操作を中心に、受付カウンターや配車場所で当日の状況を確認します。</p>
+              <ul>
+                <li>大きな操作ボタン</li>
+                <li>当日運行を素早く確認</li>
+                <li>横スクロールを抑制</li>
+              </ul>
+              <a class="primary-link" data-page="owner-ipad.html" href="owner-ipad.html">iPad画面を開く</a>
+            </div>
+          </article>
+
+          <article class="role-card is-staff">
+            <div class="role-icon" aria-hidden="true">運</div>
+            <div class="role-content">
+              <p class="role-tag">運転員・添乗員</p>
+              <h3>スタッフ運行画面</h3>
+              <p>担当便を確認し、確認・出発・乗車・到着・引渡し・完了を現場から記録します。</p>
+              <ul>
+                <li>スマートフォン対応</li>
+                <li>乗降状態を順番に記録</li>
+                <li>二重送信を防止</li>
+              </ul>
+              <a class="primary-link" data-page="staff.html" href="staff.html">スタッフ画面を開く</a>
+            </div>
+          </article>
+
+          <article class="role-card is-family">
+            <div class="role-icon" aria-hidden="true">家</div>
+            <div class="role-content">
+              <p class="role-tag">ご家族・保護者</p>
+              <h3>家族連絡画面</h3>
+              <p>送迎予定と現在の状況を確認し、欠席・時間変更・片道利用などを連絡します。</p>
+              <ul>
+                <li>送迎状況を分かりやすく表示</li>
+                <li>変更依頼を送信</li>
+                <li>施設の承認結果を確認</li>
+              </ul>
+              <a class="primary-link" data-page="member.html" href="member.html">家族画面を開く</a>
+            </div>
+          </article>
+
+          <article class="role-card is-check">
+            <div class="role-icon" aria-hidden="true">検</div>
+            <div class="role-content">
+              <p class="role-tag">営業・運行開始前</p>
+              <h3>システム一括検査</h3>
+              <p>Worker、データベース、RLS、電話番号正規化、公開ファイル、デモデータを検査します。</p>
+              <ul>
+                <li>必須項目を一括確認</li>
+                <li>デモデータの重複を防止</li>
+                <li>本番・デモ分離を確認</li>
+              </ul>
+              <a class="primary-link" data-page="system-check.html" href="system-check.html">検査画面を開く</a>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="demo-section" class="section demo-section" aria-labelledby="demo-title" hidden>
+        <div class="section-heading">
+          <p class="section-kicker">DEMO LOGIN</p>
+          <h2 id="demo-title">デモ用ログイン情報</h2>
+          <p>本番環境ではこの欄は自動的に非表示になります。</p>
+        </div>
+
+        <div class="demo-flow">
+          <div class="flow-step">
+            <span>1</span>
+            <div><strong>管理画面へログイン</strong><p>管理コードで管理・配車画面を開きます。</p></div>
+          </div>
+          <div class="flow-step">
+            <span>2</span>
+            <div><strong>デモデータを準備</strong><p>「システム確認」から一度だけ実行します。再実行しても重複しません。</p></div>
+          </div>
+          <div class="flow-step">
+            <span>3</span>
+            <div><strong>各画面を体験</strong><p>スタッフ画面と家族画面で送迎の流れを確認します。</p></div>
+          </div>
+        </div>
+
+        <div class="credential-grid">
+          <article class="credential-card">
+            <h3>共通</h3>
+            <dl>
+              <div><dt>事業所コード</dt><dd><code id="facility-code">dpro_welfare_shuttle_demo</code><button type="button" data-copy-target="facility-code">コピー</button></dd></div>
+              <div><dt>管理コード</dt><dd><code id="admin-code">1234</code><button type="button" data-copy-target="admin-code">コピー</button></dd></div>
+            </dl>
+          </article>
+
+          <article class="credential-card">
+            <h3>スタッフ</h3>
+            <dl>
+              <div><dt>ログインID</dt><dd><code id="staff-login">demo.dispatcher</code><button type="button" data-copy-target="staff-login">コピー</button></dd></div>
+              <div><dt>暗証番号</dt><dd><code id="staff-pin">5678</code><button type="button" data-copy-target="staff-pin">コピー</button></dd></div>
+            </dl>
+          </article>
+
+          <article class="credential-card">
+            <h3>ご家族</h3>
+            <dl>
+              <div><dt>家族番号</dt><dd><code id="guardian-code">DEMO-G01</code><button type="button" data-copy-target="guardian-code">コピー</button></dd></div>
+              <div><dt>デモ暗証番号</dt><dd><code id="guardian-pin">0301</code><button type="button" data-copy-target="guardian-pin">コピー</button></dd></div>
+            </dl>
+          </article>
+        </div>
+      </section>
+
+      <section class="section safety-section" aria-labelledby="safety-title">
+        <div class="safety-card">
+          <div>
+            <p class="section-kicker">SAFETY</p>
+            <h2 id="safety-title">安全な運用のために</h2>
+          </div>
+          <ul>
+            <li>個人情報を含む本番画面のURLやログイン情報は、外部へ公開しないでください。</li>
+            <li>共用端末では操作終了後にログアウトし、ブラウザを閉じてください。</li>
+            <li>運行開始前に「システム一括検査」を実行し、必須項目が合格であることを確認してください。</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div>
+        <strong>DPRO 福祉施設送迎 LINE</strong>
+        <span id="footer-version">SHUTTLE-9-FRONTEND-20260729</span>
+      </div>
+    </footer>
+
+    <div id="portal-toast" class="portal-toast" role="status" aria-live="polite" hidden></div>
   </body>
 </html>
