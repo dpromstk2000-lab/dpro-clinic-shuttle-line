@@ -6,12 +6,12 @@
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#0f766e">
     <meta name="robots" content="noindex,nofollow">
-    <title>DPRO 福祉施設送迎｜利用開始ポータル</title>
+    <title>DPRO 福祉施設送迎｜操作デモポータル</title>
     <link rel="stylesheet" href="portal.css">
     <script src="config.js" defer></script>
     <script src="portal.js" defer></script>
   </head>
-  <body>
+  <body class="operation-demo-page">
     <noscript>
       <div class="noscript-message">
         この画面を利用するにはJavaScriptを有効にしてください。
@@ -24,25 +24,32 @@
           <span class="brand-mark" aria-hidden="true">▰</span>
           <span>
             <strong>DPRO 福祉施設送迎</strong>
-            <small>利用開始ポータル</small>
+            <small>操作デモポータル</small>
           </span>
         </a>
-        <span id="environment-badge" class="environment-badge">確認中</span>
+        <div class="header-actions"><span id="environment-badge" class="environment-badge">確認中</span><a class="official-return-link" href="https://dpro-shop.com/systems/shuttle">公式の機能説明を見る</a></div>
       </div>
     </header>
 
     <main>
+<section class="operation-demo-notice" aria-label="操作デモの案内">
+  <div>
+    <small>OPERATION DEMO</small>
+    <strong>これは実際の画面を試すための公開操作デモです</strong>
+    <span>機能・導入効果・料金を読む公式紹介ページとは別の、家族・管理者・スタッフ画面の体験入口です。</span>
+  </div>
+  <a href="https://dpro-shop.com/systems/shuttle">公式の機能説明を見る</a>
+</section>
       <section class="hero" aria-labelledby="page-title">
         <div class="hero-inner">
-          <p class="eyebrow">WELFARE SHUTTLE LINE SYSTEM</p>
-          <h1 id="page-title">使う方に合わせて<br>画面を選んでください</h1>
+          <p class="eyebrow">WELFARE SHUTTLE OPERATION DEMO</p>
+          <h1 id="page-title">家族・管理者・スタッフの<br>操作画面を体験</h1>
           <p class="hero-copy">
-            管理・配車、送迎スタッフ、ご家族、営業前検査を、ひとつの入口から迷わず開けます。
+            ご家族の予定確認、管理・配車、運転員・添乗員の運行記録を、役割別の画面で体験できます。
           </p>
           <div class="hero-meta" aria-label="システム情報">
             <span><strong>事業所</strong><span id="facility-name">DPRO 福祉施設送迎 デモ事業所</span></span>
             <span><strong>時間帯</strong>Asia/Tokyo</span>
-            <span><strong>版</strong><span id="frontend-version">SHUTTLE-9</span></span>
           </div>
         </div>
       </section>
@@ -63,7 +70,7 @@
               <p>当日運行、利用者、家族連携、定期予定、車両、スタッフ、変更依頼を管理します。</p>
               <ul>
                 <li>PC向けの左メニュー</li>
-                <li>デモデータ準備</li>
+                <li>変更依頼の確認・承認</li>
                 <li>送迎便の生成・確認</li>
               </ul>
               <a class="primary-link" data-page="owner.html" href="owner.html">管理画面を開く</a>
@@ -114,28 +121,13 @@
               <a class="primary-link" data-page="member.html" href="member.html">家族画面を開く</a>
             </div>
           </article>
-
-          <article class="role-card is-check">
-            <div class="role-icon" aria-hidden="true">検</div>
-            <div class="role-content">
-              <p class="role-tag">営業・運行開始前</p>
-              <h3>システム一括検査</h3>
-              <p>Worker、データベース、RLS、電話番号正規化、公開ファイル、デモデータを検査します。</p>
-              <ul>
-                <li>必須項目を一括確認</li>
-                <li>デモデータの重複を防止</li>
-                <li>本番・デモ分離を確認</li>
-              </ul>
-              <a class="primary-link" data-page="system-check.html" href="system-check.html">検査画面を開く</a>
-            </div>
-          </article>
         </div>
       </section>
 
       <section id="demo-section" class="section demo-section" aria-labelledby="demo-title" hidden>
         <div class="section-heading">
           <p class="section-kicker">DEMO LOGIN</p>
-          <h2 id="demo-title">デモ用ログイン情報</h2>
+          <h2 id="demo-title">操作デモ用ログイン情報</h2>
           <p>本番環境ではこの欄は自動的に非表示になります。</p>
         </div>
 
@@ -146,7 +138,7 @@
           </div>
           <div class="flow-step">
             <span>2</span>
-            <div><strong>デモデータを準備</strong><p>「システム確認」から一度だけ実行します。再実行しても重複しません。</p></div>
+            <div><strong>ログイン情報を確認</strong><p>管理者・スタッフ・ご家族それぞれのデモ用番号と暗証番号を確認します。</p></div>
           </div>
           <div class="flow-step">
             <span>3</span>
@@ -185,13 +177,13 @@
         <div class="safety-card">
           <div>
             <p class="section-kicker">SAFETY</p>
-            <h2 id="safety-title">安全な運用のために</h2>
+            <h2 id="safety-title">公開デモを安全に体験するために</h2>
           </div>
           <ul>
-            <li>個人情報を含む本番画面のURLやログイン情報は、外部へ公開しないでください。</li>
-            <li>共用端末では操作終了後にログアウトし、ブラウザを閉じてください。</li>
-            <li>運行開始前に「システム一括検査」を実行し、必須項目が合格であることを確認してください。</li>
-          </ul>
+  <li>この公開デモは架空の事業所・利用者データだけを使用します。</li>
+  <li>実在する利用者名、住所、電話番号などの個人情報は入力しないでください。</li>
+  <li>操作終了後は各画面を閉じ、共用端末にログイン状態を残さないでください。</li>
+</ul>
         </div>
       </section>
     </main>
@@ -199,7 +191,7 @@
     <footer class="site-footer">
       <div>
         <strong>DPRO 福祉施設送迎 LINE</strong>
-        <span id="footer-version">SHUTTLE-9-FRONTEND-20260729</span>
+        <span>公開操作デモ</span>
       </div>
     </footer>
 

@@ -579,3 +579,100 @@ a:focus-visible {
     transition: none !important;
   }
 }
+
+/* DPRO-SYSTEMS-4 SHUTTLE OPERATION DEMO */
+.operation-demo-page .header-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.operation-demo-page .official-return-link{
+  min-height:38px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:7px 14px;
+  border-radius:999px;
+  color:#fff;
+  background:var(--primary);
+  text-decoration:none;
+  font-size:12px;
+  font-weight:900;
+  box-shadow:0 9px 22px rgba(15,118,110,.18);
+}
+.operation-demo-page .operation-demo-notice{
+  width:min(1180px,calc(100% - 40px));
+  margin:24px auto 0;
+  padding:18px 20px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:22px;
+  border:1px solid #bde8df;
+  border-radius:20px;
+  background:linear-gradient(135deg,#f7fcfb,#e9f8f4);
+  box-shadow:0 14px 34px rgba(15,62,58,.07);
+}
+.operation-demo-page .operation-demo-notice>div{
+  display:flex;
+  flex-direction:column;
+}
+.operation-demo-page .operation-demo-notice small{
+  color:var(--primary);
+  font-size:10px;
+  font-weight:1000;
+  letter-spacing:.13em;
+}
+.operation-demo-page .operation-demo-notice strong{
+  margin-top:3px;
+  font-size:18px;
+  line-height:1.4;
+}
+.operation-demo-page .operation-demo-notice span{
+  margin-top:4px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:700;
+}
+.operation-demo-page .operation-demo-notice a{
+  flex:0 0 auto;
+  min-height:44px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:9px 16px;
+  border-radius:999px;
+  color:#fff;
+  background:var(--primary);
+  text-decoration:none;
+  font-size:12px;
+  font-weight:900;
+}
+.operation-demo-page .hero{
+  padding-top:28px;
+}
+.operation-demo-page .hero-inner{
+  background:
+    radial-gradient(circle at 90% 10%,rgba(153,246,228,.16),transparent 24rem),
+    linear-gradient(120deg,rgba(7,78,73,.98),rgba(15,118,110,.94));
+}
+.operation-demo-page .role-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+@media(max-width:860px){
+  .operation-demo-page .role-grid{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .operation-demo-page .operation-demo-notice{
+    width:min(100% - 24px,1180px);
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .operation-demo-page .operation-demo-notice a{width:100%}
+  .operation-demo-page .header-actions{
+    width:100%;
+    justify-content:flex-start;
+  }
+}
