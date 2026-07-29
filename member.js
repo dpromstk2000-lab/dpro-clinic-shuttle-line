@@ -580,7 +580,13 @@ function renderHomeData(app, session, data) {
       <div class="member-card-body">
         <div class="member-field">
           <label for="member-service-date">確認する日</label>
-          <input class="member-date-control" id="member-service-date" type="date" value="${escapeHtml(data.serviceDate)}">
+          <div class="member-date-picker">
+            <input class="member-date-control" id="member-service-date" type="date" lang="ja-JP" value="${escapeHtml(data.serviceDate)}" aria-label="確認する送迎日">
+            <div class="member-date-display" aria-hidden="true">
+              <span>${escapeHtml(formatDate(data.serviceDate))}</span>
+              <span class="member-date-icon"></span>
+            </div>
+          </div>
         </div>
       </div>
     </section>

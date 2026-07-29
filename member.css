@@ -281,8 +281,7 @@ a {
 
 .member-field input,
 .member-field select,
-.member-field textarea,
-.member-date-control {
+.member-field textarea {
   width: 100%;
   min-height: 52px;
   border: 1px solid #b8cbd0;
@@ -290,6 +289,70 @@ a {
   background: white;
   color: var(--member-ink);
   padding: 12px 14px;
+}
+
+.member-date-picker {
+  position: relative;
+  min-height: 52px;
+}
+
+.member-date-control {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  min-height: 52px;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.member-date-display {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #b8cbd0;
+  border-radius: 12px;
+  background: white;
+  color: var(--member-ink);
+  padding: 12px 14px;
+  font-weight: 750;
+}
+
+.member-date-picker:focus-within .member-date-display {
+  border-color: var(--member-teal);
+  outline: 3px solid rgb(15 118 110 / 18%);
+}
+
+.member-date-icon {
+  position: relative;
+  width: 18px;
+  height: 17px;
+  flex: 0 0 18px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+}
+
+.member-date-icon::before {
+  position: absolute;
+  top: 3px;
+  right: 0;
+  left: 0;
+  border-top: 2px solid currentColor;
+  content: "";
+}
+
+.member-date-icon::after {
+  position: absolute;
+  top: -4px;
+  left: 3px;
+  width: 8px;
+  height: 4px;
+  border-right: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  content: "";
 }
 
 .member-field textarea {
