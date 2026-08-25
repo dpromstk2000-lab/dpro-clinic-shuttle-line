@@ -11,8 +11,8 @@
  */
 
 const SERVICE_NAME = "DPRO Welfare Shuttle API";
-const WORKER_VERSION = "SHUTTLE-8-WORKER-20260729";
-const DATABASE_VERSION = "SHUTTLE-1-DB-20260727";
+const WORKER_VERSION = "SHUTTLE-R2-WORKER-20260825";
+const DATABASE_VERSION = "SHUTTLE-R2-DB-20260825";
 const DEMO_PREPARE_VERSION = "SHUTTLE-7-DEMO-20260728";
 const DEMO_STAFF_PIN = "5678";
 const DEMO_GUARDIAN_CODE = "DEMO-G01";
@@ -100,7 +100,7 @@ export default {
               service: SERVICE_NAME,
               workerVersion: WORKER_VERSION,
               requiredDatabaseVersion: DATABASE_VERSION,
-              apiStage: "SHUTTLE-8",
+              apiStage: "SHUTTLE-R2",
             },
             200,
             corsOrigin,
@@ -1161,6 +1161,16 @@ async function handleLogout(
     "guardian",
   ]);
 
+  if (session.actorType === "staff" && isUuid(session.actorId)) {
+    await revokeStaffSession(
+      env,
+      session.facilityId,
+      session.actorId,
+      session.jti,
+      "logout"
+    );
+  }
+
   await writeAuditLog(env, {
     facilityId: session.facilityId,
     actorType: session.actorType,
@@ -1170,6 +1180,10 @@ async function handleLogout(
     entityId: session.jti,
     requestId,
     request,
+    newData: {
+      serverRevoked: session.actorType === "staff" && isUuid(session.actorId),
+      reason: "logout",
+    },
   });
 
   return successResponse(
@@ -1214,6 +1228,7 @@ async function handleSystemCheck(
     phoneA,
     phoneB,
     phoneC,
+    phoneD,
     demoStatus,
     demoMemberStatus,
   ] = await Promise.all([
@@ -1231,6 +1246,9 @@ async function handleSystemCheck(
     supabaseRpc(env, "shuttle_normalize_phone", {
       p_phone: "+81 90 1234 5678",
     }),
+    supabaseRpc(env, "shuttle_normalize_phone", {
+      p_phone: "0081 90 1234 5678",
+    }),
     facility.environment === "demo"
       ? supabaseRpc(env, "shuttle_demo_status", {
           p_facility_id: facility.id,
@@ -1244,10 +1262,21 @@ async function handleSystemCheck(
   const settings = Array.isArray(settingsRows)
     ? settingsRows[0]
     : null;
-  const phoneNormalizationOk =
-    phoneA === "09012345678" &&
-    phoneB === phoneA &&
-    phoneC === phoneA;
+const phoneNormalizationOk =
+  phoneA === "09012345678" &&
+  phoneB === phoneA &&
+  phoneC === phoneA &&
+  phoneD === phoneA;
+const workerPhoneValues = [
+  normalizeJapanesePhone("090-1234-5678"),
+  normalizeJapanesePhone("090 1234 5678"),
+  normalizeJapanesePhone("０９０ １２３４ ５６７８"),
+  normalizeJapanesePhone("+81 90 1234 5678"),
+  normalizeJapanesePhone("0081 90 1234 5678"),
+];
+const workerPhoneNormalizationOk = workerPhoneValues.every(
+  (value) => value === "09012345678"
+);
   const databaseOk =
     databaseCheck &&
     databaseCheck.ok === true &&
@@ -1290,6 +1319,7 @@ async function handleSystemCheck(
     databaseOk &&
     facilitySettingsOk &&
     phoneNormalizationOk &&
+    workerPhoneNormalizationOk &&
     productionGuardOk &&
     demoDataOk &&
     memberAuthenticationOk;
@@ -1298,7 +1328,7 @@ async function handleSystemCheck(
     {
       systemCheck: {
         ok: requiredOk,
-        stage: "SHUTTLE-8",
+        stage: "SHUTTLE-R2",
         checkedAt: new Date().toISOString(),
         worker: {
           status: "pass",
@@ -1327,10 +1357,16 @@ async function handleSystemCheck(
           businessEndTime:
             settings?.business_end_time ?? null,
         },
-        phoneNormalization: {
-          status: phoneNormalizationOk ? "pass" : "fail",
-          normalizedValue: phoneNormalizationOk ? phoneA : null,
-        },
+phoneNormalization: {
+  status:
+    phoneNormalizationOk && workerPhoneNormalizationOk
+      ? "pass"
+      : "fail",
+  normalizedValue: phoneNormalizationOk ? phoneA : null,
+  workerNormalizedValue:
+    workerPhoneNormalizationOk ? workerPhoneValues[4] : null,
+  zeroZero81Checked: true,
+},
         productionGuard: {
           status: productionGuardOk ? "pass" : "fail",
         },
@@ -1400,6 +1436,7 @@ async function handleSystemCheck(
           optimisticLocking: true,
           idempotencyKeys: true,
           demoPrepare: true,
+          staffSessionRevocation: true,
         },
       },
     },
@@ -1970,11 +2007,39 @@ async function handleStaffUpdate(
       prefer: "return=representation",
     }
   );
-  const staff = Array.isArray(rows) ? rows[0] : null;
-  if (!staff) {
-    throw staleUpdateError();
-  }
+const staff = Array.isArray(rows) ? rows[0] : null;
+if (!staff) {
+  throw staleUpdateError();
+}
+const authorityChanged = [
+  "staff_role",
+  "is_active",
+  "login_id",
+  "pin_hash",
+].some((key) => Object.prototype.hasOwnProperty.call(changes, key));
+if (authorityChanged) {
+  await revokeStaffSessionsForAuthorityChange(
+    env,
+    session.facilityId,
+    staffId
+  );
   await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "staff_authority_changed",
+    entityType: "staff",
+    entityId: staffId,
+    requestId,
+    request,
+    newData: {
+      staffRole: staff.staff_role,
+      isActive: staff.is_active,
+      activeSessionsRevoked: true,
+    },
+  });
+}
+await writeAuditLog(env, {
     facilityId: session.facilityId,
     actorType: session.actorType,
     actorId: session.actorId,
@@ -5676,9 +5741,12 @@ async function issueSessionToken(session, env) {
     env.SESSION_SECRET,
     encoder.encode(signingInput)
   );
-  return `${signingInput}.${base64UrlEncodeBytes(signature)}`;
+  const token = `${signingInput}.${base64UrlEncodeBytes(signature)}`;
+  if (payload.actor_type === "staff" && isUuid(payload.actor_id)) {
+    await registerStaffSession(env, payload);
+  }
+  return token;
 }
-
 async function requireSession(request, env, allowedRoles) {
   assertBaseConfiguration(env, { requireSession: true });
   const authorization = request.headers.get("authorization") || "";
@@ -5755,6 +5823,10 @@ async function requireSession(request, env, allowedRoles) {
     );
   }
 
+  if (payload.actor_type === "staff" && isUuid(payload.actor_id)) {
+    await assertCurrentStaffSession(env, payload);
+  }
+
   if (!allowedRoles.includes(payload.role)) {
     throw new AppError(
       403,
@@ -5772,6 +5844,131 @@ async function requireSession(request, env, allowedRoles) {
     displayName: "",
     jti: payload.jti,
   };
+}
+
+
+async function registerStaffSession(env, payload) {
+  await supabaseRequest(env, "shuttle_staff_sessions", {
+    method: "POST",
+    body: {
+      id: payload.jti,
+      facility_id: payload.facility_id,
+      staff_id: payload.actor_id,
+      role: payload.role,
+      issued_at: new Date(payload.iat * 1000).toISOString(),
+      expires_at: new Date(payload.exp * 1000).toISOString(),
+    },
+    prefer: "return=minimal",
+  });
+}
+
+async function revokeStaffSession(
+  env,
+  facilityId,
+  staffId,
+  jti,
+  reason
+) {
+  const params = new URLSearchParams();
+  params.set("id", `eq.${jti}`);
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("staff_id", `eq.${staffId}`);
+  params.set("revoked_at", "is.null");
+  await supabaseRequest(
+    env,
+    `shuttle_staff_sessions?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: {
+        revoked_at: new Date().toISOString(),
+        revoked_reason: reason,
+      },
+      prefer: "return=minimal",
+    }
+  );
+}
+
+async function revokeStaffSessionsForAuthorityChange(
+  env,
+  facilityId,
+  staffId
+) {
+  const params = new URLSearchParams();
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("staff_id", `eq.${staffId}`);
+  params.set("revoked_at", "is.null");
+  await supabaseRequest(
+    env,
+    `shuttle_staff_sessions?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: {
+        revoked_at: new Date().toISOString(),
+        revoked_reason: "staff_authority_changed",
+      },
+      prefer: "return=minimal",
+    }
+  );
+}
+
+async function assertCurrentStaffSession(env, payload) {
+  const nowIso = new Date().toISOString();
+  const sessionParams = new URLSearchParams();
+  sessionParams.set("select", "id,role,expires_at,revoked_at");
+  sessionParams.set("id", `eq.${payload.jti}`);
+  sessionParams.set("facility_id", `eq.${payload.facility_id}`);
+  sessionParams.set("staff_id", `eq.${payload.actor_id}`);
+  sessionParams.set("revoked_at", "is.null");
+  sessionParams.set("expires_at", `gt.${nowIso}`);
+  sessionParams.set("limit", "1");
+
+  const staffParams = new URLSearchParams();
+  staffParams.set("select", "id,staff_role,is_active");
+  staffParams.set("id", `eq.${payload.actor_id}`);
+  staffParams.set("facility_id", `eq.${payload.facility_id}`);
+  staffParams.set("is_active", "eq.true");
+  staffParams.set("limit", "1");
+
+  const [sessionRows, staffRows] = await Promise.all([
+    supabaseRequest(
+      env,
+      `shuttle_staff_sessions?${sessionParams.toString()}`
+    ),
+    supabaseRequest(
+      env,
+      `shuttle_staff?${staffParams.toString()}`
+    ),
+  ]);
+  const serverSession = Array.isArray(sessionRows)
+    ? sessionRows[0]
+    : null;
+  const staff = Array.isArray(staffRows) ? staffRows[0] : null;
+
+  if (!serverSession) {
+    throw new AppError(
+      401,
+      "SESSION_REVOKED",
+      "ログイン情報は無効になりました。もう一度ログインしてください。"
+    );
+  }
+  if (
+    !staff ||
+    serverSession.role !== payload.role ||
+    staff.staff_role !== payload.role
+  ) {
+    await revokeStaffSession(
+      env,
+      payload.facility_id,
+      payload.actor_id,
+      payload.jti,
+      "staff_authority_changed"
+    );
+    throw new AppError(
+      401,
+      "STAFF_AUTHORITY_CHANGED",
+      "スタッフ権限が変更されました。もう一度ログインしてください。"
+    );
+  }
 }
 
 async function writeAuditLog(env, entry) {
@@ -5793,6 +5990,8 @@ async function writeAuditLog(env, entry) {
       entity_type: entry.entityType,
       entity_id: entry.entityId,
       request_id: entry.requestId,
+      old_data: entry.oldData ?? null,
+      new_data: entry.newData ?? null,
       ip_hash: ipHash,
       user_agent_summary: userAgentSummary || null,
     },
@@ -6393,7 +6592,9 @@ function normalizeJapanesePhone(value) {
     String.fromCharCode(digit.charCodeAt(0) - 0xfee0)
   );
   let digits = halfWidth.replace(/[^0-9]/g, "");
-  if (digits.startsWith("81") && digits.length >= 11) {
+  if (digits.startsWith("0081") && digits.length >= 13) {
+    digits = `0${digits.slice(4)}`;
+  } else if (digits.startsWith("81") && digits.length >= 11) {
     digits = `0${digits.slice(2)}`;
   }
   return /^0[0-9]{9,10}$/.test(digits) ? digits : null;
