@@ -1,0 +1,1003 @@
+name: WELFARE_SHUTTLE R2 Remediation and QA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/product-ready-r2-remediation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  remediate-and-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASELINE_SHA: 7113626153b128ad04f7c42d2a5c04737872d607
+      API_BASE: https://dpro-welfare-shuttle-line-api.dpromstk2000.workers.dev
+      EXPECTED_WORKER_VERSION: SHUTTLE-R2-WORKER-20260825
+      EXPECTED_DB_VERSION: SHUTTLE-R2-DB-20260825
+      EXPECTED_FRONTEND_VERSION: SHUTTLE-9-FRONTEND-20260729
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify source lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+          git merge-base --is-ancestor "$BASELINE_SHA" HEAD
+          mkdir -p r2-evidence
+          {
+            echo "baseline_sha=$BASELINE_SHA"
+            echo "workflow_start_sha=$(git rev-parse HEAD)"
+            echo "lineage=PASS"
+          } > r2-evidence/source-lineage.txt
+
+      - name: Apply minimal Worker R2 patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import textwrap
+
+          p = Path('worker.js')
+          s = p.read_text(encoding='utf-8')
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              return text.replace(old, new, 1)
+
+          def sub_once(text, pattern, repl, label, flags=0):
+              out, count = re.subn(pattern, repl, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 regex match, found {count}')
+              return out
+
+          s = replace_once(
+              s,
+              'const WORKER_VERSION = "SHUTTLE-8-WORKER-20260729";',
+              'const WORKER_VERSION = "SHUTTLE-R2-WORKER-20260825";',
+              'worker version'
+          )
+          s = replace_once(
+              s,
+              'const DATABASE_VERSION = "SHUTTLE-1-DB-20260727";',
+              'const DATABASE_VERSION = "SHUTTLE-R2-DB-20260825";',
+              'database version'
+          )
+          s = s.replace('apiStage: "SHUTTLE-8"', 'apiStage: "SHUTTLE-R2"')
+          s = s.replace('stage: "SHUTTLE-8"', 'stage: "SHUTTLE-R2"')
+
+          # Replace the complete Worker-local phone normalizer to avoid whitespace-sensitive patching.
+          new_phone_fn = textwrap.dedent(r'''
+          function normalizeJapanesePhone(value) {
+            if (typeof value !== "string") {
+              return null;
+            }
+            const halfWidth = value.replace(/[０-９]/g, (digit) =>
+              String.fromCharCode(digit.charCodeAt(0) - 0xfee0)
+            );
+            let digits = halfWidth.replace(/[^0-9]/g, "");
+            if (digits.startsWith("0081") && digits.length >= 13) {
+              digits = `0${digits.slice(4)}`;
+            } else if (digits.startsWith("81") && digits.length >= 11) {
+              digits = `0${digits.slice(2)}`;
+            }
+            return /^0[0-9]{9,10}$/.test(digits) ? digits : null;
+          }
+          ''').strip()
+          s = sub_once(
+              s,
+              r'function normalizeJapanesePhone\(value\) \{.*?\n\}\n\nfunction requirePlainObject',
+              new_phone_fn + '\n\nfunction requirePlainObject',
+              'worker phone normalization',
+              re.S
+          )
+
+          # System-check: add DB + Worker-local 0081 regression proof.
+          start = s.index('async function handleSystemCheck(')
+          end = s.index('\nasync function handleDemoPrepare(', start)
+          b = s[start:end]
+          b = replace_once(
+              b,
+              '    phoneC,\n    demoStatus,',
+              '    phoneC,\n    phoneD,\n    demoStatus,',
+              'system check destructuring'
+          )
+          b = sub_once(
+              b,
+              r'(    supabaseRpc\(env, "shuttle_normalize_phone", \{\n      p_phone: "\+81 90 1234 5678",\n    \}\),\n)',
+              r'\1    supabaseRpc(env, "shuttle_normalize_phone", {\n      p_phone: "0081 90 1234 5678",\n    }),\n',
+              'system check 0081 rpc'
+          )
+          b = sub_once(
+              b,
+              r'  const phoneNormalizationOk =\n    phoneA === "09012345678" &&\n    phoneB === phoneA &&\n    phoneC === phoneA;',
+              textwrap.dedent('''
+              const phoneNormalizationOk =
+                phoneA === "09012345678" &&
+                phoneB === phoneA &&
+                phoneC === phoneA &&
+                phoneD === phoneA;
+              const workerPhoneValues = [
+                normalizeJapanesePhone("090-1234-5678"),
+                normalizeJapanesePhone("090 1234 5678"),
+                normalizeJapanesePhone("０９０ １２３４ ５６７８"),
+                normalizeJapanesePhone("+81 90 1234 5678"),
+                normalizeJapanesePhone("0081 90 1234 5678"),
+              ];
+              const workerPhoneNormalizationOk = workerPhoneValues.every(
+                (value) => value === "09012345678"
+              );
+              ''').strip(),
+              'system check phone matrix'
+          )
+          b = replace_once(
+              b,
+              '    phoneNormalizationOk &&\n    productionGuardOk &&',
+              '    phoneNormalizationOk &&\n    workerPhoneNormalizationOk &&\n    productionGuardOk &&',
+              'system check required phone'
+          )
+          b = sub_once(
+              b,
+              r'        phoneNormalization: \{\n          status: phoneNormalizationOk \? "pass" : "fail",\n          normalizedValue: phoneNormalizationOk \? phoneA : null,\n        \},',
+              textwrap.dedent('''
+                      phoneNormalization: {
+                        status:
+                          phoneNormalizationOk && workerPhoneNormalizationOk
+                            ? "pass"
+                            : "fail",
+                        normalizedValue: phoneNormalizationOk ? phoneA : null,
+                        workerNormalizedValue:
+                          workerPhoneNormalizationOk ? workerPhoneValues[4] : null,
+                        zeroZero81Checked: true,
+                      },
+              ''').strip(),
+              'system check response phone'
+          )
+          b = replace_once(
+              b,
+              '          demoPrepare: true,\n',
+              '          demoPrepare: true,\n          staffSessionRevocation: true,\n',
+              'system check staff-session capability'
+          )
+          s = s[:start] + b + s[end:]
+
+          # Logout revokes the current individual staff JTI server-side.
+          start = s.index('async function handleLogout(')
+          end = s.index('\nasync function handleSystemCheck(', start)
+          b = s[start:end]
+          b = replace_once(
+              b,
+              '\n\n  await writeAuditLog(env, {',
+              '\n\n  if (session.actorType === "staff" && isUuid(session.actorId)) {\n'
+              '    await revokeStaffSession(\n'
+              '      env,\n'
+              '      session.facilityId,\n'
+              '      session.actorId,\n'
+              '      session.jti,\n'
+              '      "logout"\n'
+              '    );\n'
+              '  }\n\n'
+              '  await writeAuditLog(env, {',
+              'logout revoke insert'
+          )
+          b = replace_once(
+              b,
+              '    request,\n  });\n\n  return successResponse(',
+              '    request,\n'
+              '    newData: {\n'
+              '      serverRevoked: session.actorType === "staff" && isUuid(session.actorId),\n'
+              '      reason: "logout",\n'
+              '    },\n'
+              '  });\n\n'
+              '  return successResponse(',
+              'logout audit evidence'
+          )
+          s = s[:start] + b + s[end:]
+
+          # Staff authority changes revoke all outstanding staff sessions.
+          start = s.index('async function handleStaffUpdate(')
+          end = s.index('\nasync function handleVehicleList(', start)
+          b = s[start:end]
+          authority_insert = textwrap.dedent('''
+          const staff = Array.isArray(rows) ? rows[0] : null;
+          if (!staff) {
+            throw staleUpdateError();
+          }
+          const authorityChanged = [
+            "staff_role",
+            "is_active",
+            "login_id",
+            "pin_hash",
+          ].some((key) => Object.prototype.hasOwnProperty.call(changes, key));
+          if (authorityChanged) {
+            await revokeStaffSessionsForAuthorityChange(
+              env,
+              session.facilityId,
+              staffId
+            );
+            await writeAuditLog(env, {
+              facilityId: session.facilityId,
+              actorType: session.actorType,
+              actorId: session.actorId,
+              action: "staff_authority_changed",
+              entityType: "staff",
+              entityId: staffId,
+              requestId,
+              request,
+              newData: {
+                staffRole: staff.staff_role,
+                isActive: staff.is_active,
+                activeSessionsRevoked: true,
+              },
+            });
+          }
+          await writeAuditLog(env, {
+          ''').strip()
+          b = replace_once(
+              b,
+              '  const staff = Array.isArray(rows) ? rows[0] : null;\n'
+              '  if (!staff) {\n'
+              '    throw staleUpdateError();\n'
+              '  }\n'
+              '  await writeAuditLog(env, {',
+              authority_insert,
+              'staff authority revoke'
+          )
+          s = s[:start] + b + s[end:]
+
+          # Staff JWT issuance creates a server-side JTI registry record.
+          issue_start = s.index('async function issueSessionToken(session, env) {')
+          issue_end = s.index('\nasync function requireSession(', issue_start)
+          new_issue = textwrap.dedent(r'''
+          async function issueSessionToken(session, env) {
+            const now = Math.floor(Date.now() / 1000);
+            const payload = {
+              iss: TOKEN_ISSUER,
+              aud: TOKEN_AUDIENCE,
+              sub: session.subject,
+              facility_id: session.facilityId,
+              actor_type: session.actorType,
+              actor_id: session.actorId,
+              role: session.role,
+              iat: now,
+              exp: now + getTokenTtlSeconds(env),
+              jti: crypto.randomUUID(),
+            };
+            const header = {
+              alg: "HS256",
+              typ: "JWT",
+            };
+            const headerPart = base64UrlEncodeText(JSON.stringify(header));
+            const payloadPart = base64UrlEncodeText(JSON.stringify(payload));
+            const signingInput = `${headerPart}.${payloadPart}`;
+            const signature = await hmacSign(
+              env.SESSION_SECRET,
+              encoder.encode(signingInput)
+            );
+            const token = `${signingInput}.${base64UrlEncodeBytes(signature)}`;
+            if (payload.actor_type === "staff" && isUuid(payload.actor_id)) {
+              await registerStaffSession(env, payload);
+            }
+            return token;
+          }
+          ''').strip()
+          s = s[:issue_start] + new_issue + s[issue_end:]
+
+          # Every individual staff request revalidates JTI + current staff role/active state.
+          req_start = s.index('async function requireSession(')
+          req_end = s.index('\nasync function writeAuditLog(', req_start)
+          b = s[req_start:req_end]
+          b = replace_once(
+              b,
+              '\n  if (!allowedRoles.includes(payload.role)) {',
+              '\n  if (payload.actor_type === "staff" && isUuid(payload.actor_id)) {\n'
+              '    await assertCurrentStaffSession(env, payload);\n'
+              '  }\n\n'
+              '  if (!allowedRoles.includes(payload.role)) {',
+              'requireSession current authority'
+          )
+          s = s[:req_start] + b + s[req_end:]
+
+          helpers = textwrap.dedent(r'''
+          async function registerStaffSession(env, payload) {
+            await supabaseRequest(env, "shuttle_staff_sessions", {
+              method: "POST",
+              body: {
+                id: payload.jti,
+                facility_id: payload.facility_id,
+                staff_id: payload.actor_id,
+                role: payload.role,
+                issued_at: new Date(payload.iat * 1000).toISOString(),
+                expires_at: new Date(payload.exp * 1000).toISOString(),
+              },
+              prefer: "return=minimal",
+            });
+          }
+
+          async function revokeStaffSession(
+            env,
+            facilityId,
+            staffId,
+            jti,
+            reason
+          ) {
+            const params = new URLSearchParams();
+            params.set("id", `eq.${jti}`);
+            params.set("facility_id", `eq.${facilityId}`);
+            params.set("staff_id", `eq.${staffId}`);
+            params.set("revoked_at", "is.null");
+            await supabaseRequest(
+              env,
+              `shuttle_staff_sessions?${params.toString()}`,
+              {
+                method: "PATCH",
+                body: {
+                  revoked_at: new Date().toISOString(),
+                  revoked_reason: reason,
+                },
+                prefer: "return=minimal",
+              }
+            );
+          }
+
+          async function revokeStaffSessionsForAuthorityChange(
+            env,
+            facilityId,
+            staffId
+          ) {
+            const params = new URLSearchParams();
+            params.set("facility_id", `eq.${facilityId}`);
+            params.set("staff_id", `eq.${staffId}`);
+            params.set("revoked_at", "is.null");
+            await supabaseRequest(
+              env,
+              `shuttle_staff_sessions?${params.toString()}`,
+              {
+                method: "PATCH",
+                body: {
+                  revoked_at: new Date().toISOString(),
+                  revoked_reason: "staff_authority_changed",
+                },
+                prefer: "return=minimal",
+              }
+            );
+          }
+
+          async function assertCurrentStaffSession(env, payload) {
+            const nowIso = new Date().toISOString();
+            const sessionParams = new URLSearchParams();
+            sessionParams.set("select", "id,role,expires_at,revoked_at");
+            sessionParams.set("id", `eq.${payload.jti}`);
+            sessionParams.set("facility_id", `eq.${payload.facility_id}`);
+            sessionParams.set("staff_id", `eq.${payload.actor_id}`);
+            sessionParams.set("revoked_at", "is.null");
+            sessionParams.set("expires_at", `gt.${nowIso}`);
+            sessionParams.set("limit", "1");
+
+            const staffParams = new URLSearchParams();
+            staffParams.set("select", "id,staff_role,is_active");
+            staffParams.set("id", `eq.${payload.actor_id}`);
+            staffParams.set("facility_id", `eq.${payload.facility_id}`);
+            staffParams.set("is_active", "eq.true");
+            staffParams.set("limit", "1");
+
+            const [sessionRows, staffRows] = await Promise.all([
+              supabaseRequest(
+                env,
+                `shuttle_staff_sessions?${sessionParams.toString()}`
+              ),
+              supabaseRequest(
+                env,
+                `shuttle_staff?${staffParams.toString()}`
+              ),
+            ]);
+            const serverSession = Array.isArray(sessionRows)
+              ? sessionRows[0]
+              : null;
+            const staff = Array.isArray(staffRows) ? staffRows[0] : null;
+
+            if (!serverSession) {
+              throw new AppError(
+                401,
+                "SESSION_REVOKED",
+                "ログイン情報は無効になりました。もう一度ログインしてください。"
+              );
+            }
+            if (
+              !staff ||
+              serverSession.role !== payload.role ||
+              staff.staff_role !== payload.role
+            ) {
+              await revokeStaffSession(
+                env,
+                payload.facility_id,
+                payload.actor_id,
+                payload.jti,
+                "staff_authority_changed"
+              );
+              throw new AppError(
+                401,
+                "STAFF_AUTHORITY_CHANGED",
+                "スタッフ権限が変更されました。もう一度ログインしてください。"
+              );
+            }
+          }
+          ''').strip()
+          insert_at = s.index('\nasync function writeAuditLog(')
+          s = s[:insert_at] + '\n\n' + helpers + '\n' + s[insert_at:]
+
+          # Preserve structured critical audit evidence where supplied.
+          start = s.index('async function writeAuditLog(')
+          end = s.index('\nasync function enforceRateLimit(', start)
+          b = s[start:end]
+          b = replace_once(
+              b,
+              '      request_id: entry.requestId,\n      ip_hash: ipHash,',
+              '      request_id: entry.requestId,\n'
+              '      old_data: entry.oldData ?? null,\n'
+              '      new_data: entry.newData ?? null,\n'
+              '      ip_hash: ipHash,',
+              'audit structured evidence'
+          )
+          s = s[:start] + b + s[end:]
+
+          p.write_text(s, encoding='utf-8')
+
+          checks = {
+              'new_worker_version': 'SHUTTLE-R2-WORKER-20260825' in s,
+              'new_db_version': 'SHUTTLE-R2-DB-20260825' in s,
+              '0081_worker': 'digits.startsWith("0081")' in s,
+              '0081_system_check': 'zeroZero81Checked: true' in s,
+              'session_registry': 'shuttle_staff_sessions' in s,
+              'session_revoke': 'SESSION_REVOKED' in s,
+              'authority_revalidate': 'STAFF_AUTHORITY_CHANGED' in s,
+              'structured_audit': 'new_data: entry.newData ?? null' in s,
+          }
+          if not all(checks.values()):
+              raise SystemExit(f'patch verification failed: {checks}')
+
+          Path('r2-evidence/patch-checks.txt').write_text(
+              '\n'.join(f'{k}={"PASS" if v else "FAIL"}' for k,v in checks.items()) + '\n',
+              encoding='utf-8'
+          )
+
+
+      - name: Write applied DB migration into source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p migrations
+          cat > migrations/20260825_welfare_shuttle_r2.sql <<'SQL'
+          -- DPRO WELFARE_SHUTTLE R2 remediation
+          -- Applied to Supabase project cbknucemarcpbscirzyv on 2026-08-25.
+          -- Adds server-side staff session revocation/current-authority support and 0081 phone normalization.
+
+          create table if not exists public.shuttle_staff_sessions (
+            id uuid primary key,
+            facility_id uuid not null references public.shuttle_facilities(id) on delete cascade,
+            staff_id uuid not null references public.shuttle_staff(id) on delete cascade,
+            role text not null check (role in ('admin','dispatcher','driver','attendant','reception')),
+            issued_at timestamptz not null default now(),
+            expires_at timestamptz not null,
+            revoked_at timestamptz,
+            revoked_reason text,
+            created_at timestamptz not null default now(),
+            constraint shuttle_staff_sessions_expiry_check check (expires_at > issued_at)
+          );
+
+          create index if not exists idx_shuttle_staff_sessions_staff_active
+            on public.shuttle_staff_sessions (facility_id, staff_id, expires_at)
+            where revoked_at is null;
+          create index if not exists idx_shuttle_staff_sessions_expiry
+            on public.shuttle_staff_sessions (expires_at);
+
+          alter table public.shuttle_staff_sessions enable row level security;
+
+          create or replace function public.shuttle_normalize_phone(p_phone text)
+          returns text
+          language plpgsql
+          immutable
+          as $function$
+          declare
+            v_ascii text;
+            v_digits text;
+          begin
+            if p_phone is null or btrim(p_phone) = '' then
+              return null;
+            end if;
+
+            v_ascii := translate(p_phone, '０１２３４５６７８９', '0123456789');
+            v_digits := regexp_replace(v_ascii, '[^0-9]', '', 'g');
+
+            if v_digits ~ '^0081[1-9][0-9]{8,9}$' then
+              v_digits := '0' || substr(v_digits, 5);
+            elsif v_digits ~ '^81[1-9][0-9]{8,9}$' then
+              v_digits := '0' || substr(v_digits, 3);
+            end if;
+
+            if v_digits = '' then
+              return null;
+            end if;
+            return v_digits;
+          end;
+          $function$;
+
+          insert into public.shuttle_schema_versions(component, version, applied_at)
+          values ('database', 'SHUTTLE-R2-DB-20260825', now())
+          on conflict (component) do update
+          set version = excluded.version,
+              applied_at = excluded.applied_at;
+
+          create or replace function public.shuttle_schema_check()
+          returns jsonb
+          language plpgsql
+          security definer
+          set search_path to 'public'
+          as $function$
+          declare
+            v_required_tables text[] := array[
+              'shuttle_facilities',
+              'shuttle_settings',
+              'shuttle_closed_dates',
+              'shuttle_riders',
+              'shuttle_guardians',
+              'shuttle_guardian_rider_links',
+              'shuttle_staff',
+              'shuttle_staff_sessions',
+              'shuttle_vehicles',
+              'shuttle_locations',
+              'shuttle_regular_schedules',
+              'shuttle_runs',
+              'shuttle_run_staff',
+              'shuttle_stops',
+              'shuttle_change_requests',
+              'shuttle_ride_events',
+              'shuttle_notifications',
+              'shuttle_incidents',
+              'shuttle_idempotency_keys',
+              'shuttle_audit_logs',
+              'shuttle_schema_versions'
+            ];
+            v_missing_tables text[];
+            v_required_rpcs text[] := array[
+              'public.shuttle_generate_daily_runs(uuid,date,uuid)',
+              'public.shuttle_register_ride_event(uuid,text,uuid,text,timestamp with time zone,text)',
+              'public.shuttle_admin_correct_stop_status(uuid,text,uuid,text)',
+              'public.shuttle_assert_demo_facility(uuid)',
+              'public.shuttle_schema_check()'
+            ];
+            v_missing_rpcs text[];
+            v_rls_disabled text[];
+            v_version text;
+            v_constraint_count integer;
+            v_index_count integer;
+          begin
+            select array_agg(required_name order by required_name)
+              into v_missing_tables
+              from unnest(v_required_tables) as required_name
+             where to_regclass('public.' || required_name) is null;
+
+            select array_agg(required_rpc order by required_rpc)
+              into v_missing_rpcs
+              from unnest(v_required_rpcs) as required_rpc
+             where to_regprocedure(required_rpc) is null;
+
+            select array_agg(c.relname order by c.relname)
+              into v_rls_disabled
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public'
+               and c.relname = any(v_required_tables)
+               and c.relkind = 'r'
+               and not c.relrowsecurity;
+
+            select version
+              into v_version
+              from public.shuttle_schema_versions
+             where component = 'database';
+
+            select count(*)
+              into v_constraint_count
+              from pg_constraint c
+              join pg_class t on t.oid = c.conrelid
+              join pg_namespace n on n.oid = t.relnamespace
+             where n.nspname = 'public'
+               and t.relname = any(v_required_tables);
+
+            select count(*)
+              into v_index_count
+              from pg_indexes
+             where schemaname = 'public'
+               and tablename = any(v_required_tables);
+
+            return jsonb_build_object(
+              'ok',
+                coalesce(array_length(v_missing_tables, 1), 0) = 0
+                and coalesce(array_length(v_missing_rpcs, 1), 0) = 0
+                and coalesce(array_length(v_rls_disabled, 1), 0) = 0
+                and v_version is not null,
+              'service', 'DPRO Welfare Shuttle Database',
+              'version', v_version,
+              'timezone', 'Asia/Tokyo',
+              'required_table_count', array_length(v_required_tables, 1),
+              'missing_tables', coalesce(to_jsonb(v_missing_tables), '[]'::jsonb),
+              'required_rpc_count', array_length(v_required_rpcs, 1),
+              'missing_rpcs', coalesce(to_jsonb(v_missing_rpcs), '[]'::jsonb),
+              'rls_disabled_tables', coalesce(to_jsonb(v_rls_disabled), '[]'::jsonb),
+              'constraint_count', v_constraint_count,
+              'index_count', v_index_count,
+              'checked_at', now()
+            );
+          end;
+          $function$;
+          SQL
+
+      - name: Syntax check patched Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp worker.js /tmp/worker-r2.mjs
+          node --check /tmp/worker-r2.mjs
+          echo "node_syntax=PASS" >> r2-evidence/patch-checks.txt
+
+      - name: Commit R2 source changes
+        id: source_commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker.js migrations/20260825_welfare_shuttle_r2.sql
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Apply WELFARE_SHUTTLE R2 remediation"
+            git push origin HEAD:main
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+          echo "source_commit_sha=$(git rev-parse HEAD)" >> r2-evidence/source-lineage.txt
+
+      - name: Deploy Worker when Cloudflare token is configured
+        id: deploy
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            echo "deploy_status=SKIPPED_NO_CLOUDFLARE_API_TOKEN" > r2-evidence/deploy.txt
+            exit 0
+          fi
+          set +e
+          npx --yes wrangler@4 deploy --config wrangler.jsonc 2>&1 | tee r2-evidence/wrangler-deploy.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            echo "deploy_status=FAILED_WRANGLER_RC_${rc}" > r2-evidence/deploy.txt
+            exit 0
+          fi
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+          echo "deploy_status=PASS" > r2-evidence/deploy.txt
+
+      - name: Install Chromium QA runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Run fresh external Chromium and runtime E2E
+        id: qa
+        shell: bash
+        env:
+          DEPLOYED: ${{ steps.deploy.outputs.deployed }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/r2-qa.mjs <<'JS'
+          import fs from 'node:fs';
+          import { chromium } from 'playwright';
+
+          const API = process.env.API_BASE;
+          const expectedWorker = process.env.EXPECTED_WORKER_VERSION;
+          const expectedDb = process.env.EXPECTED_DB_VERSION;
+          const expectedFrontend = process.env.EXPECTED_FRONTEND_VERSION;
+          const outDir = 'r2-evidence';
+          fs.mkdirSync(outDir, { recursive: true });
+
+          const result = {
+            generatedAt: new Date().toISOString(),
+            deployedByWorkflow: process.env.DEPLOYED === 'true',
+            browser: [],
+            publicHttp: [],
+            runtime: {},
+            staffE2E: {},
+            versions: { expectedWorker, expectedDb, expectedFrontend },
+          };
+
+          async function fetchRecord(name, url, options = {}) {
+            try {
+              const res = await fetch(url, { redirect: 'follow', ...options });
+              const text = await res.text();
+              let json = null;
+              try { json = JSON.parse(text); } catch {}
+              const rec = {
+                name,
+                url,
+                status: res.status,
+                ok: res.ok,
+                contentType: res.headers.get('content-type'),
+                bodyPreview: text.slice(0, 600),
+                json,
+              };
+              return rec;
+            } catch (error) {
+              return { name, url, status: 0, ok: false, error: String(error) };
+            }
+          }
+
+          const publicUrls = [
+            ['product_site', 'https://dpromstk2000-lab.github.io/dpro-line-systems-site/systems/welfare-shuttle.html'],
+            ['live_demo', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/?demo=1'],
+            ['official_page', 'https://dpro-shop.com/systems/shuttle'],
+            ['sales_lp', 'https://dpromstk2000-lab.github.io/dpro-line-systems-site/lp-welfare-shuttle.html'],
+            ['a4_html', 'https://dpromstk2000-lab.github.io/dpro-line-systems-site/flyer-welfare-shuttle.html'],
+            ['a4_pdf', 'https://dpromstk2000-lab.github.io/dpro-line-systems-site/flyer-welfare-shuttle.pdf'],
+          ];
+          for (const [name, url] of publicUrls) {
+            result.publicHttp.push(await fetchRecord(name, url));
+          }
+
+          const health = await fetchRecord('worker_health', `${API}/health`);
+          const version = await fetchRecord('worker_version', `${API}/v1/system/version`);
+          const frontend = await fetchRecord(
+            'frontend_config',
+            'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/config.js'
+          );
+          result.runtime.health = health;
+          result.runtime.version = version;
+          result.runtime.frontend = frontend;
+          result.runtime.frontendVersionMatch = Boolean(
+            frontend.status === 200 && frontend.bodyPreview.includes(expectedFrontend)
+          );
+          result.runtime.alignment = Boolean(
+            health.status === 200 &&
+            version.status === 200 &&
+            health.json?.version === expectedWorker &&
+            version.json?.workerVersion === expectedWorker &&
+            version.json?.requiredDatabaseVersion === expectedDb &&
+            result.runtime.frontendVersionMatch
+          );
+
+          const browser = await chromium.launch({ headless: true });
+          const cases = [
+            ['READY-018', 'owner-pc', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/owner.html?demo=1', 1440, 1000],
+            ['READY-019', 'member-mobile390', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/member.html?demo=1', 390, 844],
+            ['READY-020', 'staff-mobile320', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/staff.html?demo=1', 320, 720],
+            ['READY-021', 'owner-ipad', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/owner-ipad.html?demo=1', 1024, 768],
+          ];
+          const technicalPattern = /(SQLSTATE|PostgREST|SUPABASE_[A-Z_]+|service_role|sb_secret_|stack trace|TypeError:|ReferenceError:|DATABASE_[A-Z_]+)/gi;
+          const secretPattern = /(sb_secret_[A-Za-z0-9_-]+|eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,})/g;
+
+          for (const [readyCode, name, url, width, height] of cases) {
+            const context = await browser.newContext({ viewport: { width, height } });
+            const page = await context.newPage();
+            const consoleErrors = [];
+            const pageErrors = [];
+            const failedRequests = [];
+            page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+            page.on('pageerror', err => pageErrors.push(String(err)));
+            page.on('requestfailed', req => failedRequests.push(`${req.method()} ${req.url()} ${req.failure()?.errorText || ''}`));
+            let status = 0;
+            let bodyText = '';
+            let overflow = null;
+            try {
+              const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+              status = response?.status() || 0;
+              bodyText = await page.locator('body').innerText();
+              overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+              await page.screenshot({ path: `${outDir}/${readyCode}_${name}_${width}x${height}.png`, fullPage: true });
+            } catch (error) {
+              pageErrors.push(String(error));
+            }
+            const technicalMatches = bodyText.match(technicalPattern) || [];
+            const secretMatches = bodyText.match(secretPattern) || [];
+            const rec = {
+              readyCode, name, url, width, height, status,
+              horizontalOverflow: overflow,
+              consoleErrors,
+              pageErrors,
+              failedRequests,
+              blockingTechnicalText: technicalMatches,
+              secretExposureMatches: secretMatches,
+            };
+            rec.pass = status === 200 && overflow === false && consoleErrors.length === 0 && pageErrors.length === 0 && failedRequests.length === 0 && technicalMatches.length === 0 && secretMatches.length === 0;
+            result.browser.push(rec);
+            await context.close();
+          }
+          await browser.close();
+
+          async function apiJson(path, { method='GET', token=null, body=null } = {}) {
+            const headers = { accept: 'application/json' };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body !== null) headers['content-type'] = 'application/json';
+            const res = await fetch(`${API}${path}`, {
+              method, headers, body: body === null ? undefined : JSON.stringify(body),
+            });
+            const text = await res.text();
+            let json = null;
+            try { json = JSON.parse(text); } catch {}
+            return { status: res.status, json, text: text.slice(0, 800) };
+          }
+
+          const facilityCode = 'dpro_welfare_shuttle_demo';
+          const staffLogin = await apiJson('/v1/auth/staff', {
+            method: 'POST', body: { facilityCode, loginId: 'demo.dispatcher', pin: '5678' },
+          });
+          result.staffE2E.staffLogin = {
+            status: staffLogin.status,
+            role: staffLogin.json?.role || null,
+            expiresIn: staffLogin.json?.expiresIn ?? null,
+          };
+          result.staffE2E.ttlPass = Number.isInteger(staffLogin.json?.expiresIn) &&
+            staffLogin.json.expiresIn > 0 && staffLogin.json.expiresIn <= 1800;
+          const staffToken = staffLogin.json?.token || null;
+
+          if (staffToken) {
+            const allowed = await apiJson('/v1/dashboard/today', { token: staffToken });
+            const ownerOnly = await apiJson('/v1/staff', {
+              method: 'POST', token: staffToken,
+              body: { staffCode: 'R2-ACCESS-CHECK', fullName: 'R2 ACCESS CHECK', staffRole: 'driver' },
+            });
+            const logout = await apiJson('/v1/auth/logout', { method: 'POST', token: staffToken, body: {} });
+            const reuse = await apiJson('/v1/dashboard/today', { token: staffToken });
+            result.staffE2E.allowedOperation = { status: allowed.status };
+            result.staffE2E.ownerOnlyDenied = { status: ownerOnly.status };
+            result.staffE2E.logout = { status: logout.status };
+            result.staffE2E.revokedTokenReuse = { status: reuse.status, code: reuse.json?.error?.code || null };
+          }
+
+          const staffLogin2 = await apiJson('/v1/auth/staff', {
+            method: 'POST', body: { facilityCode, loginId: 'demo.dispatcher', pin: '5678' },
+          });
+          const token2 = staffLogin2.json?.token || null;
+          const adminLogin = await apiJson('/v1/auth/admin', {
+            method: 'POST', body: { facilityCode, managementCode: '1234' },
+          });
+          result.staffE2E.adminLogin = { status: adminLogin.status };
+          const adminToken = adminLogin.json?.token || null;
+
+          if (adminToken) {
+            const systemCheck = await apiJson('/v1/system/check', {
+              method: 'POST', token: adminToken, body: {},
+            });
+            result.runtime.systemCheck = {
+              status: systemCheck.status,
+              ok: systemCheck.json?.systemCheck?.ok ?? null,
+              workerVersion: systemCheck.json?.systemCheck?.worker?.version ?? null,
+              databaseVersion: systemCheck.json?.systemCheck?.database?.version ?? null,
+              phoneStatus: systemCheck.json?.systemCheck?.phoneNormalization?.status ?? null,
+              zeroZero81Checked: systemCheck.json?.systemCheck?.phoneNormalization?.zeroZero81Checked ?? null,
+              staffSessionRevocation: systemCheck.json?.systemCheck?.operationalApi?.staffSessionRevocation ?? null,
+            };
+            result.runtime.alignment = Boolean(
+              result.runtime.alignment &&
+              systemCheck.status === 200 &&
+              systemCheck.json?.systemCheck?.ok === true &&
+              systemCheck.json?.systemCheck?.worker?.version === expectedWorker &&
+              systemCheck.json?.systemCheck?.database?.version === expectedDb &&
+              systemCheck.json?.systemCheck?.phoneNormalization?.status === 'pass' &&
+              systemCheck.json?.systemCheck?.phoneNormalization?.zeroZero81Checked === true &&
+              systemCheck.json?.systemCheck?.operationalApi?.staffSessionRevocation === true
+            );
+          }
+
+          if (token2 && adminToken) {
+            const list1 = await apiJson('/v1/staff', { token: adminToken });
+            const dispatcher = list1.json?.staff?.find(x => x.loginId === 'demo.dispatcher');
+            if (dispatcher) {
+              const change = await apiJson(`/v1/staff/${dispatcher.id}`, {
+                method: 'PATCH', token: adminToken,
+                body: { expectedUpdatedAt: dispatcher.updatedAt, staffRole: 'reception' },
+              });
+              const staleUse = await apiJson('/v1/dashboard/today', { token: token2 });
+              result.staffE2E.roleChange = { status: change.status };
+              result.staffE2E.staleRoleTokenReuse = { status: staleUse.status, code: staleUse.json?.error?.code || null };
+
+              const list2 = await apiJson('/v1/staff', { token: adminToken });
+              const changed = list2.json?.staff?.find(x => x.id === dispatcher.id);
+              if (changed) {
+                const restore = await apiJson(`/v1/staff/${dispatcher.id}`, {
+                  method: 'PATCH', token: adminToken,
+                  body: { expectedUpdatedAt: changed.updatedAt, staffRole: 'dispatcher' },
+                });
+                result.staffE2E.roleRestore = { status: restore.status };
+              }
+            }
+          }
+
+          result.staffE2E.pass = Boolean(
+            result.staffE2E.staffLogin?.status === 200 &&
+            result.staffE2E.ttlPass === true &&
+            result.staffE2E.allowedOperation?.status === 200 &&
+            result.staffE2E.ownerOnlyDenied?.status === 403 &&
+            result.staffE2E.logout?.status === 200 &&
+            result.staffE2E.revokedTokenReuse?.status === 401 &&
+            result.staffE2E.adminLogin?.status === 200 &&
+            result.staffE2E.roleChange?.status === 200 &&
+            result.staffE2E.staleRoleTokenReuse?.status === 401 &&
+            result.staffE2E.roleRestore?.status === 200
+          );
+
+          result.browserPass = result.browser.length === 4 && result.browser.every(x => x.pass);
+          result.publicHttpPass = result.publicHttp.every(x => x.status === 200);
+          result.renderedWordingPass = result.browser.every(x => x.blockingTechnicalText.length === 0);
+          result.allPass = Boolean(
+            result.deployedByWorkflow &&
+            result.runtime.alignment &&
+            result.browserPass &&
+            result.publicHttpPass &&
+            result.renderedWordingPass &&
+            result.staffE2E.pass
+          );
+
+          fs.writeFileSync(`${outDir}/r2-qa-report.json`, JSON.stringify(result, null, 2));
+          fs.writeFileSync(`${outDir}/r2-qa-summary.txt`, [
+            `deployed=${result.deployedByWorkflow}`,
+            `runtime_alignment=${result.runtime.alignment}`,
+            `browser_pass=${result.browserPass}`,
+            `public_http_pass=${result.publicHttpPass}`,
+            `rendered_wording_pass=${result.renderedWordingPass}`,
+            `staff_e2e_pass=${result.staffE2E.pass}`,
+            `all_pass=${result.allPass}`,
+          ].join('\n') + '\n');
+
+          console.log(JSON.stringify(result, null, 2));
+          JS
+          node /tmp/r2-qa.mjs | tee r2-evidence/r2-qa-console.log
+          if grep -q '^all_pass=true$' r2-evidence/r2-qa-summary.txt; then
+            echo "all_pass=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "all_pass=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Include patched deploy files in evidence
+        if: always()
+        shell: bash
+        run: |
+          cp worker.js r2-evidence/worker.js
+          cp migrations/20260825_welfare_shuttle_r2.sql r2-evidence/20260825_welfare_shuttle_r2.sql
+          git rev-parse HEAD > r2-evidence/final-source-sha.txt
+
+      - name: Upload R2 evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: welfare-shuttle-r2-evidence
+          path: r2-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce R2 gate
+        if: always()
+        shell: bash
+        run: |
+          if [ -f r2-evidence/r2-qa-summary.txt ]; then
+            cat r2-evidence/r2-qa-summary.txt
+          fi
+          test "${{ steps.qa.outputs.all_pass }}" = "true"
