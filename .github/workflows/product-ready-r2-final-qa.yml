@@ -1,0 +1,372 @@
+name: WELFARE_SHUTTLE R2 Final QA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  final-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      API_BASE: https://dpro-welfare-shuttle-line-api.dpromstk2000.workers.dev
+      EXPECTED_WORKER_VERSION: SHUTTLE-R2-WORKER-20260825
+      EXPECTED_DB_VERSION: SHUTTLE-R2-DB-20260825
+      EXPECTED_FRONTEND_VERSION: SHUTTLE-9-FRONTEND-20260729
+
+    steps:
+      - name: Checkout current R2 source
+        uses: actions/checkout@v4
+
+      - name: Verify current R2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p r2-evidence
+          grep -q 'const WORKER_VERSION = "SHUTTLE-R2-WORKER-20260825";' worker.js
+          grep -q 'const DATABASE_VERSION = "SHUTTLE-R2-DB-20260825";' worker.js
+          test -f migrations/20260825_welfare_shuttle_r2.sql
+          git rev-parse HEAD | tee r2-evidence/source-sha.txt
+          echo 'source_r2=PASS' > r2-evidence/source-check.txt
+
+      - name: Require Cloudflare deploy token
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo 'CLOUDFLARE_API_TOKEN is not configured in GitHub Actions secrets.'
+            exit 1
+          fi
+
+      - name: Deploy current R2 Worker
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deploy --config wrangler.jsonc 2>&1 | tee r2-evidence/wrangler-deploy.log
+          echo 'deploy=PASS' > r2-evidence/deploy.txt
+
+      - name: Install Chromium QA runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Run fresh external Chromium and runtime E2E
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > r2-final-qa.mjs <<'JS'
+          import fs from 'node:fs';
+          import { chromium } from 'playwright';
+
+          const API = process.env.API_BASE;
+          const expectedWorker = process.env.EXPECTED_WORKER_VERSION;
+          const expectedDb = process.env.EXPECTED_DB_VERSION;
+          const expectedFrontend = process.env.EXPECTED_FRONTEND_VERSION;
+          const outDir = 'r2-evidence';
+          fs.mkdirSync(outDir, { recursive: true });
+
+          const result = {
+            generatedAt: new Date().toISOString(),
+            publicHttp: [],
+            browser: [],
+            runtime: {},
+            staffE2E: {},
+          };
+
+          async function fetchRecord(name, url, options = {}) {
+            try {
+              const res = await fetch(url, { redirect: 'follow', ...options });
+              const text = await res.text();
+              let json = null;
+              try { json = JSON.parse(text); } catch {}
+              return {
+                name,
+                url,
+                status: res.status,
+                ok: res.ok,
+                contentType: res.headers.get('content-type'),
+                bodyPreview: text.slice(0, 600),
+                json,
+              };
+            } catch (error) {
+              return { name, url, status: 0, ok: false, error: String(error) };
+            }
+          }
+
+          async function apiJson(path, { method = 'GET', token = null, body = null } = {}) {
+            const headers = { accept: 'application/json' };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body !== null) headers['content-type'] = 'application/json';
+            const res = await fetch(`${API}${path}`, {
+              method,
+              headers,
+              body: body === null ? undefined : JSON.stringify(body),
+            });
+            const text = await res.text();
+            let json = null;
+            try { json = JSON.parse(text); } catch {}
+            return { status: res.status, json, text: text.slice(0, 800) };
+          }
+
+          const publicUrls = [
+            ['product_site', 'https://dpromstk2000-lab.github.io/dpro-line-systems-site/systems/welfare-shuttle.html'],
+            ['live_demo', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/?demo=1'],
+            ['official_page', 'https://dpro-shop.com/systems/shuttle'],
+            ['sales_lp', 'https://dpromstk2000-lab.github.io/dpro-line-systems-site/lp-welfare-shuttle.html'],
+            ['a4_html', 'https://dpromstk2000-lab.github.io/dpro-line-systems-site/flyer-welfare-shuttle.html'],
+            ['a4_pdf', 'https://dpromstk2000-lab.github.io/dpro-line-systems-site/flyer-welfare-shuttle.pdf'],
+          ];
+          for (const [name, url] of publicUrls) {
+            result.publicHttp.push(await fetchRecord(name, url));
+          }
+          result.publicHttpPass = result.publicHttp.every(x => x.status === 200);
+
+          const health = await fetchRecord('worker_health', `${API}/health`);
+          const version = await fetchRecord('worker_version', `${API}/v1/system/version`);
+          const frontend = await fetchRecord(
+            'frontend_config',
+            'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/config.js'
+          );
+          result.runtime.health = health;
+          result.runtime.version = version;
+          result.runtime.frontend = frontend;
+          result.runtime.frontendVersionMatch = Boolean(
+            frontend.status === 200 && frontend.bodyPreview.includes(expectedFrontend)
+          );
+          result.runtime.alignment = Boolean(
+            health.status === 200 &&
+            version.status === 200 &&
+            health.json?.version === expectedWorker &&
+            version.json?.workerVersion === expectedWorker &&
+            version.json?.requiredDatabaseVersion === expectedDb &&
+            result.runtime.frontendVersionMatch
+          );
+
+          const browser = await chromium.launch({ headless: true });
+          const cases = [
+            ['READY-018', 'owner-pc', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/owner.html?demo=1', 1440, 1000],
+            ['READY-019', 'member-mobile390', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/member.html?demo=1', 390, 844],
+            ['READY-020', 'staff-mobile320', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/staff.html?demo=1', 320, 720],
+            ['READY-021', 'owner-ipad', 'https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/owner-ipad.html?demo=1', 1024, 768],
+          ];
+          const technicalPattern = /(SQLSTATE|PostgREST|SUPABASE_[A-Z_]+|service_role|sb_secret_|stack trace|TypeError:|ReferenceError:|DATABASE_[A-Z_]+)/gi;
+          const secretPattern = /(sb_secret_[A-Za-z0-9_-]+|eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,})/g;
+
+          for (const [readyCode, name, url, width, height] of cases) {
+            const context = await browser.newContext({ viewport: { width, height } });
+            const page = await context.newPage();
+            const consoleErrors = [];
+            const pageErrors = [];
+            const failedRequests = [];
+            page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+            page.on('pageerror', err => pageErrors.push(String(err)));
+            page.on('requestfailed', req => failedRequests.push(`${req.method()} ${req.url()} ${req.failure()?.errorText || ''}`));
+            let status = 0;
+            let bodyText = '';
+            let overflow = null;
+            try {
+              const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+              status = response?.status() || 0;
+              bodyText = await page.locator('body').innerText();
+              overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+              await page.screenshot({ path: `${outDir}/${readyCode}_${name}_${width}x${height}.png`, fullPage: true });
+            } catch (error) {
+              pageErrors.push(String(error));
+            }
+            const technicalMatches = bodyText.match(technicalPattern) || [];
+            const secretMatches = bodyText.match(secretPattern) || [];
+            const rec = {
+              readyCode, name, url, width, height, status,
+              horizontalOverflow: overflow,
+              consoleErrors,
+              pageErrors,
+              failedRequests,
+              blockingTechnicalText: technicalMatches,
+              secretExposureMatches: secretMatches,
+            };
+            rec.pass = status === 200 && overflow === false &&
+              consoleErrors.length === 0 && pageErrors.length === 0 &&
+              failedRequests.length === 0 && technicalMatches.length === 0 &&
+              secretMatches.length === 0;
+            result.browser.push(rec);
+            await context.close();
+          }
+          await browser.close();
+          result.browserPass = result.browser.length === 4 && result.browser.every(x => x.pass);
+          result.renderedWordingPass = result.browser.every(x => x.blockingTechnicalText.length === 0);
+
+          const facilityCode = 'dpro_welfare_shuttle_demo';
+
+          const staffLogin = await apiJson('/v1/auth/staff', {
+            method: 'POST',
+            body: { facilityCode, loginId: 'demo.dispatcher', pin: '5678' },
+          });
+          result.staffE2E.staffLogin = {
+            status: staffLogin.status,
+            role: staffLogin.json?.role || null,
+            expiresIn: staffLogin.json?.expiresIn ?? null,
+          };
+          result.staffE2E.ttlPass = Number.isInteger(staffLogin.json?.expiresIn) &&
+            staffLogin.json.expiresIn > 0 && staffLogin.json.expiresIn <= 1800;
+          const staffToken = staffLogin.json?.token || null;
+
+          if (staffToken) {
+            const allowed = await apiJson('/v1/dashboard/today', { token: staffToken });
+            const ownerOnly = await apiJson('/v1/staff', {
+              method: 'POST', token: staffToken,
+              body: { staffCode: 'R2-ACCESS-CHECK', fullName: 'R2 ACCESS CHECK', staffRole: 'driver' },
+            });
+            const logout = await apiJson('/v1/auth/logout', { method: 'POST', token: staffToken, body: {} });
+            const reuse = await apiJson('/v1/dashboard/today', { token: staffToken });
+            result.staffE2E.allowedOperation = { status: allowed.status };
+            result.staffE2E.ownerOnlyDenied = { status: ownerOnly.status };
+            result.staffE2E.logout = { status: logout.status };
+            result.staffE2E.revokedTokenReuse = {
+              status: reuse.status,
+              code: reuse.json?.error?.code || null
+            };
+          }
+
+          const staffLogin2 = await apiJson('/v1/auth/staff', {
+            method: 'POST',
+            body: { facilityCode, loginId: 'demo.dispatcher', pin: '5678' },
+          });
+          const token2 = staffLogin2.json?.token || null;
+
+          const adminLogin = await apiJson('/v1/auth/admin', {
+            method: 'POST',
+            body: { facilityCode, managementCode: '1234' },
+          });
+          result.staffE2E.adminLogin = { status: adminLogin.status };
+          const adminToken = adminLogin.json?.token || null;
+
+          if (adminToken) {
+            const systemCheck = await apiJson('/v1/system/check', {
+              method: 'POST', token: adminToken, body: {}
+            });
+            result.runtime.systemCheck = {
+              status: systemCheck.status,
+              ok: systemCheck.json?.systemCheck?.ok ?? null,
+              workerVersion: systemCheck.json?.systemCheck?.worker?.version ?? null,
+              databaseVersion: systemCheck.json?.systemCheck?.database?.version ?? null,
+              phoneStatus: systemCheck.json?.systemCheck?.phoneNormalization?.status ?? null,
+              zeroZero81Checked: systemCheck.json?.systemCheck?.phoneNormalization?.zeroZero81Checked ?? null,
+              staffSessionRevocation: systemCheck.json?.systemCheck?.operationalApi?.staffSessionRevocation ?? null,
+            };
+            result.runtime.alignment = Boolean(
+              result.runtime.alignment &&
+              systemCheck.status === 200 &&
+              systemCheck.json?.systemCheck?.ok === true &&
+              systemCheck.json?.systemCheck?.worker?.version === expectedWorker &&
+              systemCheck.json?.systemCheck?.database?.version === expectedDb &&
+              systemCheck.json?.systemCheck?.phoneNormalization?.status === 'pass' &&
+              systemCheck.json?.systemCheck?.phoneNormalization?.zeroZero81Checked === true &&
+              systemCheck.json?.systemCheck?.operationalApi?.staffSessionRevocation === true
+            );
+          }
+
+          if (token2 && adminToken) {
+            let dispatcherId = null;
+            let originalRole = 'dispatcher';
+            try {
+              const list1 = await apiJson('/v1/staff', { token: adminToken });
+              const dispatcher = list1.json?.staff?.find(x => x.loginId === 'demo.dispatcher');
+              if (dispatcher) {
+                dispatcherId = dispatcher.id;
+                originalRole = dispatcher.staffRole || dispatcher.staff_role || 'dispatcher';
+
+                const change = await apiJson(`/v1/staff/${dispatcher.id}`, {
+                  method: 'PATCH',
+                  token: adminToken,
+                  body: {
+                    expectedUpdatedAt: dispatcher.updatedAt,
+                    staffRole: 'reception'
+                  },
+                });
+
+                const staleUse = await apiJson('/v1/dashboard/today', { token: token2 });
+                result.staffE2E.roleChange = { status: change.status };
+                result.staffE2E.staleRoleTokenReuse = {
+                  status: staleUse.status,
+                  code: staleUse.json?.error?.code || null
+                };
+              }
+            } finally {
+              if (dispatcherId && adminToken) {
+                const list2 = await apiJson('/v1/staff', { token: adminToken });
+                const changed = list2.json?.staff?.find(x => x.id === dispatcherId);
+                if (changed) {
+                  const restore = await apiJson(`/v1/staff/${dispatcherId}`, {
+                    method: 'PATCH',
+                    token: adminToken,
+                    body: {
+                      expectedUpdatedAt: changed.updatedAt,
+                      staffRole: originalRole
+                    },
+                  });
+                  result.staffE2E.roleRestore = { status: restore.status };
+                }
+              }
+            }
+          }
+
+          result.staffE2E.pass = Boolean(
+            result.staffE2E.staffLogin?.status === 200 &&
+            result.staffE2E.ttlPass === true &&
+            result.staffE2E.allowedOperation?.status === 200 &&
+            result.staffE2E.ownerOnlyDenied?.status === 403 &&
+            result.staffE2E.logout?.status === 200 &&
+            result.staffE2E.revokedTokenReuse?.status === 401 &&
+            result.staffE2E.adminLogin?.status === 200 &&
+            result.staffE2E.roleChange?.status === 200 &&
+            result.staffE2E.staleRoleTokenReuse?.status === 401 &&
+            result.staffE2E.roleRestore?.status === 200
+          );
+
+          result.allPass = Boolean(
+            result.runtime.alignment &&
+            result.browserPass &&
+            result.publicHttpPass &&
+            result.renderedWordingPass &&
+            result.staffE2E.pass
+          );
+
+          fs.writeFileSync(`${outDir}/r2-final-qa-report.json`, JSON.stringify(result, null, 2));
+          fs.writeFileSync(`${outDir}/r2-final-qa-summary.txt`, [
+            `runtime_alignment=${result.runtime.alignment}`,
+            `browser_pass=${result.browserPass}`,
+            `public_http_pass=${result.publicHttpPass}`,
+            `rendered_wording_pass=${result.renderedWordingPass}`,
+            `staff_e2e_pass=${result.staffE2E.pass}`,
+            `all_pass=${result.allPass}`,
+          ].join('\n') + '\n');
+
+          console.log(JSON.stringify(result, null, 2));
+          if (!result.allPass) process.exitCode = 1;
+          JS
+
+          node r2-final-qa.mjs | tee r2-evidence/r2-final-qa-console.log
+
+      - name: Upload R2 final evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: welfare-shuttle-r2-final-evidence
+          path: r2-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce final R2 gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '^all_pass=true$' r2-evidence/r2-final-qa-summary.txt
