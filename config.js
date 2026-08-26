@@ -9,3 +9,30 @@ window.DPRO_SHUTTLE_CONFIG = Object.freeze({
   liffId: "",
   requestTimeoutMs: 12000
 });
+
+(() => {
+  "use strict";
+
+  const currentPage = (window.location.pathname.split("/").pop() || "index.html").toLowerCase();
+  const tutorialHosts = new Set([
+    "index.html",
+    "owner.html",
+    "owner-ipad.html",
+    "staff.html",
+    "member.html"
+  ]);
+  if (!tutorialHosts.has(currentPage)) return;
+  if (document.querySelector('script[data-dpro-tutorial-loader]')) return;
+
+  const stylesheet = document.createElement("link");
+  stylesheet.rel = "stylesheet";
+  stylesheet.href = "tutorial.css";
+  stylesheet.dataset.dproTutorialLoader = "style";
+  document.head.appendChild(stylesheet);
+
+  const script = document.createElement("script");
+  script.src = "tutorial.js";
+  script.defer = true;
+  script.dataset.dproTutorialLoader = "script";
+  document.head.appendChild(script);
+})();

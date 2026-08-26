@@ -1,0 +1,622 @@
+{
+  "schema_version": "DPRO_TUTORIAL_CONTENT_PACKAGE_V1.1-DESIGN",
+  "phase": "R2_INFORMATION_DESIGN",
+  "system": {
+    "system_code": "WELFARE_SHUTTLE",
+    "system_name": "DPRO 福祉施設送迎 LINE",
+    "repository": "dpromstk2000-lab/dpro-welfare-shuttle-line",
+    "locked_sha": "67da4ac367f67e6cafecb906f417a375b3b33c3e",
+    "pages_root": "https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/",
+    "product_site": "https://dpro-shop.com/systems/shuttle",
+    "timezone": "Asia/Tokyo",
+    "environment_observed": "demo"
+  },
+  "standard": {
+    "name": "DPRO TUTORIAL STANDARD V1.1",
+    "state": "ACTIVE_LOCKED",
+    "r3_draggable_first10_required": true,
+    "r3_implemented": false
+  },
+  "role_map": [
+    {
+      "role_key": "admin",
+      "label": "管理者",
+      "screens": [
+        "owner.html",
+        "owner-ipad.html",
+        "staff.html where authorized"
+      ]
+    },
+    {
+      "role_key": "dispatcher",
+      "label": "配車担当",
+      "screens": [
+        "owner.html",
+        "owner-ipad.html",
+        "staff.html"
+      ]
+    },
+    {
+      "role_key": "driver",
+      "label": "運転員",
+      "screens": [
+        "staff.html"
+      ]
+    },
+    {
+      "role_key": "attendant",
+      "label": "添乗員",
+      "screens": [
+        "staff.html"
+      ]
+    },
+    {
+      "role_key": "reception",
+      "label": "受付",
+      "screens": [
+        "owner management context as permitted by runtime"
+      ]
+    },
+    {
+      "role_key": "family_guardian",
+      "label": "ご家族・保護者",
+      "screens": [
+        "member.html"
+      ]
+    }
+  ],
+  "first10": [
+    {
+      "id": "F10-01",
+      "order": 1,
+      "title": "役割別の入口を確認",
+      "role": "all",
+      "page": "index.html",
+      "route": "./",
+      "purpose": "公開操作デモの4つの入口を理解する",
+      "normal_entry_point": "Pages root",
+      "target_selector_candidates": [
+        "#role-title",
+        ".role-grid",
+        ".role-card"
+      ],
+      "fallback_copy": "家族・管理者PC・iPad・スタッフの4つの入口から、担当する画面を選びます。",
+      "allowed_behavior": [
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "auto-login",
+        "credential submission"
+      ],
+      "desktop_mobile_notes": "portal cards are responsive",
+      "evidence": [
+        "index.html: role-grid / four role cards"
+      ]
+    },
+    {
+      "id": "F10-02",
+      "order": 2,
+      "title": "管理画面の当日運行",
+      "role": "admin/dispatcher",
+      "page": "owner.html",
+      "route": "owner.html",
+      "purpose": "当日の便・変更依頼・注意事項の全体像を読む",
+      "normal_entry_point": "管理・配車画面",
+      "target_selector_candidates": [
+        "[data-section=\"today\"]",
+        ".content-title",
+        ".panel"
+      ],
+      "fallback_copy": "「当日運行」では、本日の便、変更依頼、注意事項をまとめて確認します。",
+      "allowed_behavior": [
+        "navigate-section",
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "[data-action=\"generate-runs\"]",
+        "all create/save/delete buttons",
+        "demo_prepare"
+      ],
+      "desktop_mobile_notes": "desktop sidebar; mobile bottom navigation generated from same data-section buttons",
+      "evidence": [
+        "shuttle.js: sectionMeta.today",
+        "shuttle.js: navigationButton",
+        "shuttle.js: generate-runs"
+      ]
+    },
+    {
+      "id": "F10-03",
+      "order": 3,
+      "title": "利用者を確認",
+      "role": "admin/dispatcher",
+      "page": "owner.html",
+      "route": "owner.html#riders-conceptual",
+      "purpose": "利用者一覧と検索の位置を知る",
+      "normal_entry_point": "左メニュー 利用者",
+      "target_selector_candidates": [
+        "[data-section=\"riders\"]",
+        "#rider-search",
+        ".data-table"
+      ],
+      "fallback_copy": "「利用者」では、送迎利用者を検索・確認します。Tutorialは登録や編集は行いません。",
+      "allowed_behavior": [
+        "navigate-section",
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "[data-action=\"open-rider-form\"]",
+        "rider form submit",
+        "delete/deactivate"
+      ],
+      "desktop_mobile_notes": "read-only table/search target; search should not be auto-filled",
+      "evidence": [
+        "shuttle.js: sectionMeta.riders",
+        "shuttle.js: rider-search/open-rider-form"
+      ]
+    },
+    {
+      "id": "F10-04",
+      "order": 4,
+      "title": "家族・LINE連携を確認",
+      "role": "admin/dispatcher",
+      "page": "owner.html",
+      "route": "owner.html#families-conceptual",
+      "purpose": "家族情報と連携承認状態の場所を知る",
+      "normal_entry_point": "左メニュー 家族・LINE連携",
+      "target_selector_candidates": [
+        "[data-section=\"families\"]",
+        ".panel",
+        ".data-table"
+      ],
+      "fallback_copy": "「家族・LINE連携」では、家族情報と利用者との関係、連携状態を確認します。",
+      "allowed_behavior": [
+        "navigate-section",
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "approve-guardian-link",
+        "reject/suspend guardian link",
+        "guardian create/edit/save"
+      ],
+      "desktop_mobile_notes": "same owner runtime",
+      "evidence": [
+        "shuttle.js: sectionMeta.families"
+      ]
+    },
+    {
+      "id": "F10-05",
+      "order": 5,
+      "title": "定期予定を確認",
+      "role": "admin/dispatcher",
+      "page": "owner.html",
+      "route": "owner.html#schedules-conceptual",
+      "purpose": "曜日別の迎え/送り予定と乗降場所の確認場所を知る",
+      "normal_entry_point": "左メニュー 定期予定",
+      "target_selector_candidates": [
+        "[data-section=\"schedules\"]",
+        ".panel",
+        ".data-table"
+      ],
+      "fallback_copy": "「定期予定」では、曜日ごとの迎え・送りと乗降場所を確認します。",
+      "allowed_behavior": [
+        "navigate-section",
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "schedule create/edit/save/delete",
+        "run generation"
+      ],
+      "desktop_mobile_notes": "no automatic date/day edits",
+      "evidence": [
+        "shuttle.js: sectionMeta.schedules",
+        "labels.serviceType"
+      ]
+    },
+    {
+      "id": "F10-06",
+      "order": 6,
+      "title": "車両・スタッフを確認",
+      "role": "admin/dispatcher",
+      "page": "owner.html",
+      "route": "owner.html#resources-conceptual",
+      "purpose": "運行資源の確認場所を知る",
+      "normal_entry_point": "左メニュー 車両・スタッフ",
+      "target_selector_candidates": [
+        "[data-section=\"resources\"]",
+        ".panel",
+        ".data-table"
+      ],
+      "fallback_copy": "「車両・スタッフ」では、送迎車両と担当スタッフの情報を確認します。",
+      "allowed_behavior": [
+        "navigate-section",
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "vehicle create/edit/status change",
+        "staff create/edit/role change/password or PIN changes"
+      ],
+      "desktop_mobile_notes": "never expose credentials or secrets",
+      "evidence": [
+        "shuttle.js: sectionMeta.resources"
+      ]
+    },
+    {
+      "id": "F10-07",
+      "order": 7,
+      "title": "変更依頼の確認場所",
+      "role": "admin/dispatcher",
+      "page": "owner.html",
+      "route": "owner.html#changes-conceptual",
+      "purpose": "家族からの欠席・時間・場所・片道等の依頼を読む場所を知る",
+      "normal_entry_point": "左メニュー 変更依頼",
+      "target_selector_candidates": [
+        "[data-section=\"changes\"]",
+        ".panel",
+        ".data-table"
+      ],
+      "fallback_copy": "「変更依頼」では、家族から届いた依頼内容と確認状態を読みます。Tutorialは承認・却下しません。",
+      "allowed_behavior": [
+        "navigate-section",
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "review-change approve",
+        "review-change reject",
+        "any request status mutation"
+      ],
+      "desktop_mobile_notes": "read-only explanation only",
+      "evidence": [
+        "shuttle.js: sectionMeta.changes",
+        "labels.requestType/requestStatus"
+      ]
+    },
+    {
+      "id": "F10-08",
+      "order": 8,
+      "title": "iPadで当日状況を見る",
+      "role": "admin/dispatcher",
+      "page": "owner-ipad.html",
+      "route": "owner-ipad.html",
+      "purpose": "iPad向け同一管理機能の当日確認を理解する",
+      "normal_entry_point": "iPad管理画面",
+      "target_selector_candidates": [
+        "#app",
+        "[data-section=\"today\"]",
+        ".panel"
+      ],
+      "fallback_copy": "iPad管理画面は管理PCと同じ運行情報を、タッチしやすい配置で確認します。",
+      "allowed_behavior": [
+        "highlight",
+        "explain",
+        "navigate-section"
+      ],
+      "forbidden_mutations": [
+        "same owner mutation set",
+        "generate-runs",
+        "approvals",
+        "saves"
+      ],
+      "desktop_mobile_notes": "body data-layout=ipad; same shuttle.js",
+      "evidence": [
+        "owner-ipad.html: data-layout=ipad",
+        "index.html: iPad role card"
+      ]
+    },
+    {
+      "id": "F10-09",
+      "order": 9,
+      "title": "スタッフの担当便を読む",
+      "role": "driver/attendant",
+      "page": "staff.html",
+      "route": "staff.html",
+      "purpose": "担当便・利用者・現在状態を確認する場所を知る",
+      "normal_entry_point": "スタッフ運行画面",
+      "target_selector_candidates": [
+        "#staff-app",
+        ".run-list",
+        ".run-card",
+        ".stop-card"
+      ],
+      "fallback_copy": "スタッフ画面では担当便と各乗降地点の現在状態を確認します。状態記録ボタンはTutorialから押しません。",
+      "allowed_behavior": [
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "[data-event-type][data-stop-id]",
+        "#event-submit",
+        "event-form submit"
+      ],
+      "desktop_mobile_notes": "mobile-first/touch; cards and actions stack responsively",
+      "evidence": [
+        "staff.html: #staff-app/#event-dialog",
+        "staff.js: data-event-type/data-stop-id"
+      ]
+    },
+    {
+      "id": "F10-10",
+      "order": 10,
+      "title": "家族の予定・変更連絡を理解",
+      "role": "family/guardian",
+      "page": "member.html",
+      "route": "member.html",
+      "purpose": "送迎予定・現在状態・変更依頼の入口を理解する",
+      "normal_entry_point": "家族連絡画面",
+      "target_selector_candidates": [
+        "#member-app",
+        "#member-service-date",
+        "#member-change-form"
+      ],
+      "fallback_copy": "家族画面では予定と状況を確認し、必要時に変更内容を事業所へ連絡できます。Tutorialは送信しません。",
+      "allowed_behavior": [
+        "highlight",
+        "explain"
+      ],
+      "forbidden_mutations": [
+        "#member-change-form submit",
+        "LINE link request",
+        "any member POST"
+      ],
+      "desktop_mobile_notes": "responsive family UI; highlight date control without changing value",
+      "evidence": [
+        "member.js: member-service-date/member-change-form",
+        "member.js: change request POST"
+      ]
+    }
+  ],
+  "global_safety": {
+    "tutorial_mode": "explain_and_navigate_only",
+    "production_mutation_allowed": false,
+    "never_auto_actions": [
+      "create",
+      "update",
+      "delete",
+      "send",
+      "save",
+      "confirm",
+      "approve",
+      "reject",
+      "pay",
+      "change_status",
+      "generate_runs",
+      "ride_event",
+      "demo_prepare",
+      "system_check"
+    ],
+    "sensitive_data_exclusions": [
+      "real name",
+      "real address",
+      "real phone",
+      "real family data",
+      "real disability/care/medical-adjacent notes",
+      "photos",
+      "credentials",
+      "tokens",
+      "raw diagnostics"
+    ],
+    "internal_exclusions": [
+      "system-check.html",
+      "worker.js",
+      "wrangler.jsonc",
+      "migrations",
+      "GitHub workflows",
+      "raw API diagnostics"
+    ]
+  },
+  "guide_center": {
+    "categories": [
+      {
+        "id": "GC-START",
+        "title": "はじめに",
+        "topics": [
+          "役割別の入口",
+          "デモと本番の違い",
+          "安全に見るだけの操作"
+        ]
+      },
+      {
+        "id": "GC-FAMILY",
+        "title": "家族・保護者",
+        "topics": [
+          "送迎予定の見方",
+          "迎え/送りと現在状態",
+          "変更依頼の種類",
+          "承認結果の見方"
+        ]
+      },
+      {
+        "id": "GC-OWNER",
+        "title": "管理・配車",
+        "topics": [
+          "当日運行",
+          "利用者",
+          "家族・LINE連携",
+          "定期予定",
+          "車両・スタッフ",
+          "変更依頼"
+        ]
+      },
+      {
+        "id": "GC-IPAD",
+        "title": "iPad当日確認",
+        "topics": [
+          "当日便の確認",
+          "タッチ画面の見方"
+        ]
+      },
+      {
+        "id": "GC-STAFF",
+        "title": "スタッフ運行",
+        "topics": [
+          "担当便の見方",
+          "乗降状態の意味",
+          "不在/引渡し時の注意"
+        ]
+      },
+      {
+        "id": "GC-SAFETY",
+        "title": "安全・運用上の注意",
+        "topics": [
+          "Tutorialが自動操作しない項目",
+          "個人情報を入力しない",
+          "緊急時は画面だけに頼らない"
+        ]
+      }
+    ],
+    "excluded_categories": [
+      "system check/raw diagnostics",
+      "demo_prepare",
+      "backend/deployment"
+    ]
+  },
+  "print_manual_mapping": [
+    {
+      "manual_id": "PM-01",
+      "title": "家族向け 送迎予定・変更連絡",
+      "roles": [
+        "family_guardian"
+      ],
+      "source_steps": [
+        "F10-01",
+        "F10-10"
+      ],
+      "future_format": "A4 portrait PDF"
+    },
+    {
+      "manual_id": "PM-02",
+      "title": "管理・配車 基本操作",
+      "roles": [
+        "admin",
+        "dispatcher",
+        "reception"
+      ],
+      "source_steps": [
+        "F10-02",
+        "F10-03",
+        "F10-04",
+        "F10-05",
+        "F10-06",
+        "F10-07"
+      ],
+      "future_format": "A4 portrait PDF"
+    },
+    {
+      "manual_id": "PM-03",
+      "title": "iPad 当日確認",
+      "roles": [
+        "admin",
+        "dispatcher"
+      ],
+      "source_steps": [
+        "F10-08"
+      ],
+      "future_format": "A4 portrait PDF"
+    },
+    {
+      "manual_id": "PM-04",
+      "title": "スタッフ 運行確認・状態記録の考え方",
+      "roles": [
+        "driver",
+        "attendant"
+      ],
+      "source_steps": [
+        "F10-09"
+      ],
+      "future_format": "A4 portrait PDF",
+      "safety_note": "manual may explain buttons but Tutorial automation must never press them"
+    }
+  ],
+  "integration_plan": {
+    "canonical_source": "CONTENT_PACKAGE.json",
+    "product_site_role": "feature/value/price explanation at dpro-shop.com/systems/shuttle",
+    "pages_demo_role": "real-screen operation demo",
+    "tutorial_role": "safe in-app explanation/navigation overlay",
+    "existing_demo_guide": "demo-guide.html can become Guide Center entry/reference after R4 without duplicating canonical copy",
+    "future_manual_role": "print manuals derive from same content IDs and safety notes",
+    "no_r3_in_r2": true
+  },
+  "source_evidence": [
+    {
+      "file": "index.html",
+      "supports": [
+        "role entrances",
+        "product-site link",
+        "demo safety copy"
+      ]
+    },
+    {
+      "file": "owner.html",
+      "supports": [
+        "desktop owner shell"
+      ]
+    },
+    {
+      "file": "owner-ipad.html",
+      "supports": [
+        "ipad owner shell / same runtime"
+      ]
+    },
+    {
+      "file": "shuttle.js",
+      "supports": [
+        "section map",
+        "owner roles/status labels",
+        "owner mutation controls"
+      ]
+    },
+    {
+      "file": "staff.html",
+      "supports": [
+        "staff app shell",
+        "event dialog / submit boundary"
+      ]
+    },
+    {
+      "file": "staff.js",
+      "supports": [
+        "stop progression",
+        "event mutation selectors/API"
+      ]
+    },
+    {
+      "file": "member.html",
+      "supports": [
+        "family shell / LIFF include"
+      ]
+    },
+    {
+      "file": "member.js",
+      "supports": [
+        "family schedule date",
+        "change form and POST boundary"
+      ]
+    },
+    {
+      "file": "demo-guide.html",
+      "supports": [
+        "existing help/manual journey",
+        "product-site relationship",
+        "fictional-data warning"
+      ]
+    },
+    {
+      "file": "shuttle.css/member.css/staff.css",
+      "supports": [
+        "responsive/mobile source evidence"
+      ]
+    },
+    {
+      "file": "config.js",
+      "supports": [
+        "demo environment/API/facility/timezone runtime config"
+      ]
+    }
+  ]
+}

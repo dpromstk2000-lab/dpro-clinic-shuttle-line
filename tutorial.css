@@ -1,0 +1,233 @@
+:root {
+  --dpro-tutorial-brand: #0f766e;
+  --dpro-tutorial-brand-dark: #0b625c;
+  --dpro-tutorial-ink: #163247;
+  --dpro-tutorial-muted: #607482;
+  --dpro-tutorial-line: #cbdcdf;
+  --dpro-tutorial-surface: #ffffff;
+  --dpro-tutorial-soft: #eaf7f5;
+  --dpro-tutorial-warning: #8a5600;
+  --dpro-tutorial-shadow: 0 18px 50px rgb(9 38 66 / 24%);
+}
+
+.dpro-tutorial-launcher {
+  position: fixed;
+  z-index: 2147483000;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  max-width: calc(100vw - 28px);
+  padding: 10px 16px;
+  border: 1px solid rgb(255 255 255 / 45%);
+  border-radius: 999px;
+  background: var(--dpro-tutorial-brand);
+  box-shadow: 0 10px 30px rgb(9 38 66 / 24%);
+  color: white;
+  font: 800 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dpro-tutorial-launcher:hover,
+.dpro-tutorial-launcher:focus-visible {
+  background: var(--dpro-tutorial-brand-dark);
+}
+
+.dpro-tutorial-launcher:focus-visible,
+.dpro-tutorial-card button:focus-visible,
+.dpro-tutorial-card a:focus-visible,
+.dpro-tutorial-handle:focus-visible {
+  outline: 3px solid rgb(45 212 191 / 45%);
+  outline-offset: 3px;
+}
+
+.dpro-tutorial-target {
+  position: fixed;
+  z-index: 2147482990;
+  pointer-events: none;
+  border: 3px solid #12a79b;
+  border-radius: 12px;
+  box-shadow: 0 0 0 5px rgb(18 167 155 / 16%), 0 8px 28px rgb(9 38 66 / 18%);
+  transition: inset 120ms ease, width 120ms ease, height 120ms ease;
+}
+
+.dpro-tutorial-card {
+  position: fixed;
+  z-index: 2147483010;
+  top: 18px;
+  left: 18px;
+  width: min(430px, calc(100vw - 24px));
+  max-height: min(76vh, 660px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--dpro-tutorial-line);
+  border-radius: 18px;
+  background: var(--dpro-tutorial-surface);
+  box-shadow: var(--dpro-tutorial-shadow);
+  color: var(--dpro-tutorial-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+  overflow-wrap: anywhere;
+  touch-action: auto;
+}
+
+.dpro-tutorial-handle {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--dpro-tutorial-line);
+  background: linear-gradient(180deg, #f9fdfc, var(--dpro-tutorial-soft));
+  color: var(--dpro-tutorial-muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.dpro-tutorial-handle:active { cursor: grabbing; }
+
+.dpro-tutorial-grip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dpro-tutorial-grip::before {
+  content: "⋮⋮";
+  color: var(--dpro-tutorial-brand);
+  font-size: 18px;
+  letter-spacing: -4px;
+}
+
+.dpro-tutorial-step {
+  color: var(--dpro-tutorial-brand-dark);
+  white-space: nowrap;
+}
+
+.dpro-tutorial-body { padding: 18px; }
+
+.dpro-tutorial-eyebrow {
+  margin: 0 0 5px;
+  color: var(--dpro-tutorial-brand-dark);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: .1em;
+}
+
+.dpro-tutorial-title {
+  margin: 0;
+  color: var(--dpro-tutorial-ink);
+  font-size: clamp(20px, 5vw, 26px);
+  line-height: 1.35;
+}
+
+.dpro-tutorial-copy {
+  margin: 10px 0 0;
+  color: var(--dpro-tutorial-muted);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.75;
+}
+
+.dpro-tutorial-fallback {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid #e5c680;
+  border-radius: 12px;
+  background: #fff7e8;
+  color: var(--dpro-tutorial-warning);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.dpro-tutorial-role {
+  display: inline-flex;
+  margin-top: 12px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--dpro-tutorial-soft);
+  color: var(--dpro-tutorial-brand-dark);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.dpro-tutorial-actions {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dpro-tutorial-actions button,
+.dpro-tutorial-actions a {
+  min-width: 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 12px;
+  border: 1px solid var(--dpro-tutorial-line);
+  border-radius: 11px;
+  background: white;
+  color: var(--dpro-tutorial-ink);
+  font: 850 13px/1.3 inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dpro-tutorial-actions .is-primary {
+  border-color: var(--dpro-tutorial-brand);
+  background: var(--dpro-tutorial-brand);
+  color: white;
+}
+
+.dpro-tutorial-actions .is-primary:hover { background: var(--dpro-tutorial-brand-dark); }
+
+.dpro-tutorial-subactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 12px;
+}
+
+.dpro-tutorial-subactions button,
+.dpro-tutorial-subactions a {
+  min-height: 38px;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--dpro-tutorial-brand-dark);
+  font: 800 12px/1.3 inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.dpro-tutorial-card[hidden],
+.dpro-tutorial-target[hidden] { display: none !important; }
+
+@media (max-width: 480px) {
+  .dpro-tutorial-card {
+    width: calc(100vw - 16px);
+    max-height: min(72vh, 620px);
+    border-radius: 15px;
+  }
+  .dpro-tutorial-body { padding: 15px; }
+  .dpro-tutorial-actions { grid-template-columns: 1fr 1fr; }
+  .dpro-tutorial-actions .dpro-tutorial-skip { grid-column: 1 / -1; order: 3; }
+  .dpro-tutorial-launcher { right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dpro-tutorial-target { transition: none; }
+}
