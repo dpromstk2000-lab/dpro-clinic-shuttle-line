@@ -1180,6 +1180,10 @@
       await openLocationForm();
     } else if (action === "open-schedule-form") {
       await openScheduleForm();
+    } else if (action === "jump-schedule-day") {
+      jumpToScheduleDay(actionButton.dataset.day);
+    } else if (action === "jump-schedule-top") {
+      jumpToScheduleDay(null);
     } else if (action === "edit-schedule") {
       await openScheduleEditForm(actionButton.dataset.id);
     } else if (action === "toggle-schedule-status") {
@@ -1698,6 +1702,11 @@
     const locations = state.data.locations || [];
     const riderById = new Map((state.data.riders || []).map((item) => [item.id, item]));
     const locationById = new Map(locations.map((item) => [item.id, item]));
+    const weekdayOrder = [1, 2, 3, 4, 5, 6, 0];
+    const weekdayCounts = schedules.reduce((counts, schedule) => {
+      counts[schedule.dayOfWeek] = (counts[schedule.dayOfWeek] || 0) + 1;
+      return counts;
+    }, {});
     content.innerHTML = `
       <section class="content-header">
         <div>
@@ -1724,13 +1733,29 @@
             <span class="status-badge status-active">${schedules.length}件</span>
           </header>
           ${schedules.length ? `
-            <div class="data-table-wrap">
+            <nav class="weekday-index" aria-label="曜日別予定インデックス">
+              <button type="button" class="weekday-index-button is-all" data-action="jump-schedule-top">
+                <span>全件</span><strong>${schedules.length}</strong>
+              </button>
+              ${weekdayOrder.map((day) => `
+                <button
+                  type="button"
+                  class="weekday-index-button"
+                  data-action="jump-schedule-day"
+                  data-day="${day}"
+                  ${weekdayCounts[day] ? "" : "disabled"}
+                >
+                  <span>${escapeHtml(labels.days[day])}</span>
+                  <strong>${weekdayCounts[day] || 0}</strong>
+                </button>`).join("")}
+            </nav>
+            <div class="data-table-wrap" data-schedule-list-top>
               <table class="data-table">
                 <thead><tr><th>曜日・患者</th><th>区分</th><th>時間</th><th>適用期間</th><th>乗車場所</th><th>降車場所</th><th>状態</th><th><span class="sr-only">操作</span></th></tr></thead>
                 <tbody>
                   ${schedules.map((schedule) => {
                     const rider = riderById.get(schedule.riderId);
-                    return `<tr>
+                    return `<tr data-schedule-day="${Number(schedule.dayOfWeek)}">
                       <td class="cell-primary" data-label="曜日・患者"><span class="primary-cell">${escapeHtml(labels.days[schedule.dayOfWeek])}曜日・${escapeHtml(rider?.fullName || "患者不明")}</span><span class="secondary-cell">${escapeHtml(schedule.routeGroupCode || "A")}</span></td>
                       <td data-label="区分">${escapeHtml(labels.serviceType[schedule.serviceType] || schedule.serviceType)}</td>
                       <td data-label="時間">${escapeHtml(formatTime(schedule.scheduledPickupTime))} → ${escapeHtml(formatTime(schedule.scheduledDropoffTime))}</td>
@@ -2751,6 +2776,17 @@
     await loadSchedules();
     renderSchedules();
     showToast("定期送迎予定を登録しました。");
+  }
+
+  function jumpToScheduleDay(day) {
+    const target = day === null
+      ? document.querySelector("[data-schedule-list-top]")
+      : document.querySelector(`[data-schedule-day="${CSS.escape(String(day))}"]`);
+    if (!target) {
+      showToast("この曜日の定期予定はありません。", "warning");
+      return;
+    }
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function openScheduleEditForm(scheduleId) {
