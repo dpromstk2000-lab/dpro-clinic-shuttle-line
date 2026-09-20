@@ -1,6 +1,6 @@
 {
   "schema_version": "DPRO_CLINIC_SHUTTLE_BUILD_SPEC_V2_1_R1",
-  "generated_at": "2026-09-20T22:35:00+09:00",
+  "generated_at": "2026-09-21T00:45:43+09:00",
   "product_name": "DPRO 診療所送迎予約",
   "system_code": "CLINIC_SHUTTLE",
   "dev_code": "PD-20260919140524-2709EE",
@@ -23,7 +23,7 @@
     "demo_facility_code": "dpro_clinic_shuttle_demo",
     "frontend_version": "CLINIC-SHUTTLE-V2.1-R6-20260920",
     "worker_version": "CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920",
-    "database_version": "CLINIC-SHUTTLE-V2.1-DB-R1-20260920"
+    "database_version": "CLINIC-SHUTTLE-V2.1-DB-R2-20260920"
   },
   "product_boundary": {
     "included": [
@@ -152,7 +152,7 @@
     "FACTORY FINAL 4/4",
     "FINAL LOCK and return ZIP"
   ],
-  "current_stage": "FINAL_BRUSHUP_APPLIED_PENDING_FINAL_4_OF_4",
+  "current_stage": "FINAL_LOCK",
   "phase3": {
     "admin_reservation_ui": true,
     "phone_proxy_reservation": true,
@@ -160,10 +160,7 @@
     "settings_left_index_right_panel": true,
     "settings_api": true,
     "contact_status_update_api": true,
-    "pending": [
-      "final_4_of_4",
-      "final_lock"
-    ],
+    "pending": [],
     "family_line_new_reservation_ui": true,
     "guardian_reservation_privacy": true,
     "reservation_location_guard": true,
@@ -189,6 +186,11 @@
     "member_compact_disclosures": true,
     "existing_transport_warning": true,
     "specific_resource_conflict_messages": true,
-    "qa_fixture_cleanup": true
+    "qa_fixture_cleanup": true,
+    "final_4_of_4": true,
+    "final_lock": true,
+    "final_lock_at": "2026-09-21T00:45:43+09:00",
+    "final_lock_source_head": "283ef57ce60d8720cec8f52f8b954868b6d391c5",
+    "final_lock_audit_run": "https://github.com/dpromstk2000-lab/dpro-clinic-shuttle-line/actions/runs/35520578820"
   }
 }

@@ -1,0 +1,135 @@
+{
+  "created_at": "2026-09-21T00:45:43+09:00",
+  "system_code": "CLINIC_SHUTTLE",
+  "source_baseline_head": "283ef57ce60d8720cec8f52f8b954868b6d391c5",
+  "audit_run": "https://github.com/dpromstk2000-lab/dpro-clinic-shuttle-line/actions/runs/35520578820",
+  "result": "PASS_4_OF_4_FINAL_LOCK",
+  "versions": {
+    "frontend": "CLINIC-SHUTTLE-V2.1-R6-20260920",
+    "worker": "CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920",
+    "database": "CLINIC-SHUTTLE-V2.1-DB-R2-20260920"
+  },
+  "health": {
+    "ok": true,
+    "systemCode": "CLINIC_SHUTTLE",
+    "version": "CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920",
+    "status": "healthy"
+  },
+  "version_endpoint": {
+    "ok": true,
+    "workerVersion": "CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920",
+    "requiredDatabaseVersion": "CLINIC-SHUTTLE-V2.1-DB-R2-20260920",
+    "apiStage": "CLINIC-SHUTTLE-V2.1-R6"
+  },
+  "system_check": {
+    "ok": true,
+    "stage": "CLINIC-SHUTTLE-V2.1-R6",
+    "checkedAt": "2026-09-20T15:45:43.266Z",
+    "worker": {
+      "status": "pass",
+      "version": "CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920"
+    },
+    "database": {
+      "status": "pass",
+      "version": "CLINIC-SHUTTLE-V2.1-DB-R2-20260920",
+      "requiredVersion": "CLINIC-SHUTTLE-V2.1-DB-R2-20260920",
+      "missingTables": [],
+      "missingRpcs": [],
+      "rlsDisabledTables": [],
+      "constraintCount": null,
+      "indexCount": null
+    },
+    "facility": {
+      "status": "pass",
+      "facilityCode": "dpro_clinic_shuttle_demo",
+      "environment": "demo",
+      "scheduleStepMinutes": 30,
+      "businessStartTime": "07:00:00",
+      "businessEndTime": "20:00:00"
+    },
+    "phoneNormalization": {
+      "status": "pass",
+      "normalizedValue": "09012345678",
+      "workerNormalizedValue": "09012345678",
+      "zeroZero81Checked": true
+    },
+    "productionGuard": {
+      "status": "pass"
+    },
+    "demoData": {
+      "status": "pass",
+      "version": "CLINIC-SHUTTLE-V2.1-DEMO-R1-20260920",
+      "prepared": true,
+      "duplicateSafe": true,
+      "staffCount": 2,
+      "vehicleCount": 2,
+      "riderCount": 4,
+      "locationCount": 5,
+      "scheduleCount": 40,
+      "dispatcherLoginReady": true,
+      "memberLoginReady": true,
+      "guardianCount": 1,
+      "guardianLinkCount": 1
+    },
+    "browserCors": {
+      "status": "pass",
+      "requiredBeforeFrontendPublication": true
+    },
+    "lineMemberAuthentication": {
+      "status": "pending",
+      "configured": false,
+      "requiredAtStep": "LIFF実機確認時",
+      "demoPortalReady": true
+    },
+    "rateLimiting": {
+      "status": "recommended",
+      "bindingName": "RATE_LIMITER"
+    },
+    "notificationDelivery": {
+      "status": "pass",
+      "mode": "off_safe",
+      "lineAccessTokenConfigured": false,
+      "previousDayCron": true,
+      "eventNotifications": [
+        "departure",
+        "boarding",
+        "arrival"
+      ],
+      "counts": {
+        "queued": 0,
+        "sent": 0,
+        "skipped": 4,
+        "failed": 0
+      },
+      "channelFailureIsolation": true
+    },
+    "operationalApi": {
+      "status": "pass",
+      "riderManagement": true,
+      "guardianManagement": true,
+      "memberPortal": true,
+      "secureLineLinkRequest": true,
+      "regularSchedules": true,
+      "dailyRuns": true,
+      "staffAssignments": true,
+      "rideEvents": true,
+      "changeRequests": true,
+      "optimisticLocking": true,
+      "idempotencyKeys": true,
+      "demoPrepare": true,
+      "staffSessionRevocation": true,
+      "notificationQueue": true,
+      "notificationDispatch": true,
+      "previousDayNotificationCron": true,
+      "eventNotificationIsolation": true
+    }
+  },
+  "pages": {
+    "base": "https://dpromstk2000-lab.github.io/dpro-clinic-shuttle-line",
+    "frontend_version_verified": "CLINIC-SHUTTLE-V2.1-R6-20260920"
+  },
+  "accepted_non_blockers": [
+    "LINE member authentication is completed at production LIFF connection stage.",
+    "RATE_LIMITER is recommended before production when reported as recommended."
+  ]
+}

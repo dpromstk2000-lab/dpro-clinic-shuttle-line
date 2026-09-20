@@ -1,0 +1,23 @@
+DPRO 診療所送迎予約 / FINAL LOCK
+
+STATUS: FINAL LOCK
+LOCKED_AT: 2026-09-21T00:45:43+09:00
+SYSTEM_CODE: CLINIC_SHUTTLE
+SOURCE_BASELINE_HEAD: 283ef57ce60d8720cec8f52f8b954868b6d391c5
+AUDIT_RUN: https://github.com/dpromstk2000-lab/dpro-clinic-shuttle-line/actions/runs/35520578820
+
+LOCKED RELEASE
+- Frontend: CLINIC-SHUTTLE-V2.1-R6-20260920
+- Worker: CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920
+- Database: CLINIC-SHUTTLE-V2.1-DB-R2-20260920
+- Supabase schema: dpro_clinic_shuttle
+- Demo facility: dpro_clinic_shuttle_demo
+
+FINAL RULE
+- 既にACCEPT/PASS済みの領域は、証明された不具合がない限り再開発しない。
+- 今後の修正はforward-onlyで行う。
+- FINAL LOCK後の変更は、変更理由・影響範囲・再QA証跡を必須とする。
+- 電子カルテ、診療記録、病名、検査結果、処方、レセプト、医療判断は製品境界外。
+- ドライバー表示は送迎に必要な最小情報のみ。
+
+CENTRAL RETURN: READY
