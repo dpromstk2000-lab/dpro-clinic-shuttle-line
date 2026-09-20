@@ -1,0 +1,54 @@
+name: CLINIC_SHUTTLE V2.1 Regular Schedule Lifecycle Fix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-regular-schedule-lifecycle-fix.yml'
+      - '.github/workflows/clinic-shuttle-v21-regular-schedule-lifecycle-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  regular-schedule-lifecycle-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/workflows/clinic-shuttle-v21-regular-schedule-lifecycle-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check shuttle.js
+          node --check worker.js
+          grep -q '時間は30分単位' shuttle.js
+          grep -q 'data-action="edit-schedule"' shuttle.js
+          grep -q 'data-action="toggle-schedule-status"' shuttle.js
+          grep -q 'function openScheduleEditForm' shuttle.js
+          grep -q 'function updateScheduleActiveStatus' shuttle.js
+          grep -q 'requireThirtyMinuteTime' worker.js
+          grep -q '過去日を適用開始日には指定できません' worker.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add shuttle.js worker.js
+          git commit -m "Align regular schedules with MASTER lifecycle rules"
+          git push
