@@ -1,0 +1,46 @@
+name: CLINIC_SHUTTLE V2.1 First Use Guide Hidden Fix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-first-use-guide-hidden-fix.yml'
+      - '.github/workflows/clinic-shuttle-v21-first-use-guide-hidden-fix.py'
+
+permissions:
+  contents: write
+
+jobs:
+  first-use-guide-hidden-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/workflows/clinic-shuttle-v21-first-use-guide-hidden-fix.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '.dpro-tutorial-launcher\[hidden\]' tutorial.css
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add tutorial.css
+          git commit -m "Fix hidden operation guide launcher"
+          git push
