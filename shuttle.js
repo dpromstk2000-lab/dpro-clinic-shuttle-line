@@ -3331,8 +3331,13 @@
     const canAssign =
       state.loginMode === "staff" &&
       ["admin", "dispatcher"].includes(state.role);
-    if (canAssign && !state.data.staff.length) {
-      await loadStaff();
+    if (canAssign) {
+      if (!state.data.staff.length) {
+        await loadStaff();
+      }
+      if (!state.data.vehicles.length) {
+        await loadVehicles();
+      }
     }
     const assignments = run.assignments || [];
     const stops = run.stops || [];
@@ -3390,6 +3395,10 @@
       onReady: (dialog) => {
         dialog.querySelector("[data-modal-close-button]")
           ?.addEventListener("click", closeModal);
+        dialog.querySelector("[data-assign-run-vehicle]")
+          ?.addEventListener("click", (event) =>
+            assignRunVehicle(run, event.currentTarget, dialog)
+          );
         dialog.querySelectorAll("[data-assign-run-staff]").forEach((button) => {
           button.addEventListener("click", () =>
             assignRunStaff(run.id, button.dataset.duty, button, dialog)
@@ -3415,11 +3424,21 @@
         <div class="info-strip is-warning" role="status">
           <span aria-hidden="true">△</span>
           <div>
-            <strong>担当割当は配車担当のスタッフIDログインで行います。</strong><br>
-            管理コードは初期設定・閲覧用です。現場スタッフへ便を表示するには、配車担当でログインし直してください。
+            <strong>車両・担当割当は配車担当のスタッフIDログインで行います。</strong><br>
+            管理コードは初期設定・閲覧用です。配車操作を行うには、配車担当でログインし直してください。
           </div>
         </div>`;
     }
+
+    const activeVehicles = (state.data.vehicles || []).filter(
+      (vehicle) =>
+        vehicle.isActive !== false &&
+        vehicle.vehicleStatus === "available"
+    );
+    const currentVehicleId = run.vehicle?.id || "";
+    const currentVehicleAvailable = currentVehicleId
+      ? activeVehicles.some((vehicle) => vehicle.id === currentVehicleId)
+      : false;
 
     const activeStaff = (state.data.staff || []).filter(
       (staff) => staff.isActive !== false
@@ -3451,10 +3470,52 @@
       <section class="panel">
         <header class="panel-header">
           <div>
-            <h3 class="panel-title">担当スタッフ割当</h3>
-            <p class="panel-subtitle">同じ時間帯への重複割当はデータベース側でも拒否します。</p>
+            <h3 class="panel-title">車両・担当割当</h3>
+            <p class="panel-subtitle">停止中の車両・スタッフは候補に出さず、同じ時間帯への重複割当はデータベース側でも拒否します。</p>
           </div>
         </header>
+
+        <div class="run-vehicle-assignment">
+          <div class="record-card">
+            <div class="record-card-header">
+              <div>
+                <h3>車両割当</h3>
+                <p class="record-code">${run.vehicle
+                  ? `${escapeHtml(run.vehicle.vehicleCode || "―")}・${escapeHtml(run.vehicle.vehicleName || "車両")}`
+                  : "未割当"}</p>
+              </div>
+              ${run.vehicle
+                ? (currentVehicleAvailable
+                    ? statusBadge("available", labels.vehicleStatus)
+                    : statusBadge("unavailable", labels.vehicleStatus))
+                : statusBadge("unassigned", { unassigned: "未割当" })}
+            </div>
+
+            <div class="field">
+              <label for="run-vehicle-select">利用可能な車両</label>
+              <select id="run-vehicle-select" data-run-vehicle-select>
+                <option value="">未割当</option>
+                ${activeVehicles.map((vehicle) => `
+                  <option
+                    value="${escapeHtml(vehicle.id)}"
+                    ${vehicle.id === currentVehicleId ? "selected" : ""}
+                  >${escapeHtml(vehicle.vehicleName)}（${escapeHtml(vehicle.vehicleCode)}）</option>`
+                ).join("")}
+              </select>
+              <p class="field-hint">停止・整備中・利用不可の車両は表示しません。</p>
+            </div>
+
+            <div class="resource-actions">
+              <button
+                type="button"
+                class="button button-wide"
+                data-assign-run-vehicle
+                ${activeVehicles.length || run.vehicle ? "" : "disabled"}
+              >${run.vehicle ? "車両割当を更新" : "車両を割り当て"}</button>
+            </div>
+          </div>
+        </div>
+
         <div class="form-grid" style="padding:16px">
           <div class="record-card">
             <div class="record-card-header">
@@ -3504,6 +3565,50 @@
           </div>
         </div>
       </section>`;
+  }
+
+  async function assignRunVehicle(run, button, dialog) {
+    const select = dialog.querySelector("[data-run-vehicle-select]");
+    const vehicleId = String(select?.value || "");
+    const currentVehicleId = String(run.vehicle?.id || "");
+
+    if (vehicleId === currentVehicleId) {
+      showToast("車両割当は変更されていません。", "warning");
+      return;
+    }
+
+    const selectedVehicle = (state.data.vehicles || []).find(
+      (vehicle) => vehicle.id === vehicleId
+    );
+    if (
+      selectedVehicle &&
+      (selectedVehicle.isActive === false ||
+        selectedVehicle.vehicleStatus !== "available")
+    ) {
+      showToast("停止中・整備中・利用不可の車両は割り当てできません。", "error");
+      return;
+    }
+
+    const message = vehicleId
+      ? `${selectedVehicle?.vehicleName || "選択した車両"}をこの便へ割り当てますか？`
+      : "この便の車両割当を解除しますか？";
+    if (!window.confirm(message)) return;
+
+    setBusy(button, true, "更新中…");
+    try {
+      await api(`/v1/runs/${encodeURIComponent(run.id)}`, {
+        method: "PATCH",
+        body: {
+          expectedVersion: Number(run.version),
+          vehicleId: vehicleId || null
+        }
+      });
+      await refreshRunDetail(run.id);
+      showToast(vehicleId ? "車両を割り当てました。" : "車両割当を解除しました。");
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+      setBusy(button, false);
+    }
   }
 
   function staffAssignmentOptions(staff) {

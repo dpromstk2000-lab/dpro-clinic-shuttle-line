@@ -1144,6 +1144,18 @@ a {
   scroll-margin-top: 78px;
 }
 
+.run-vehicle-assignment {
+  padding: 16px 16px 0;
+}
+
+.run-vehicle-assignment .record-card {
+  max-width: 620px;
+}
+
+.run-vehicle-assignment .field {
+  margin-top: 14px;
+}
+
 .resource-actions {
   display: flex;
   flex-wrap: wrap;
