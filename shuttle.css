@@ -1144,6 +1144,25 @@ a {
   scroll-margin-top: 78px;
 }
 
+.resource-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.row-button.is-danger {
+  border-color: #d76565;
+  color: #a52d2d;
+}
+
+.row-button.is-danger:hover {
+  background: var(--red-soft);
+}
+
 .row-button:hover {
   background: var(--teal-50);
 }

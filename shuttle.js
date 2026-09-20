@@ -1196,6 +1196,26 @@
       openVehicleForm();
     } else if (action === "open-staff-form") {
       openStaffForm();
+    } else if (action === "edit-vehicle") {
+      openVehicleEditForm(actionButton.dataset.id);
+    } else if (action === "toggle-vehicle-status") {
+      await updateVehicleActiveStatus(
+        actionButton.dataset.id,
+        actionButton.dataset.active === "true",
+        actionButton
+      );
+    } else if (action === "delete-vehicle") {
+      await softDeleteVehicle(actionButton.dataset.id, actionButton);
+    } else if (action === "edit-staff") {
+      openStaffEditForm(actionButton.dataset.id);
+    } else if (action === "toggle-staff-status") {
+      await updateStaffActiveStatus(
+        actionButton.dataset.id,
+        actionButton.dataset.active === "true",
+        actionButton
+      );
+    } else if (action === "delete-staff") {
+      await softDeleteStaff(actionButton.dataset.id, actionButton);
     } else if (action === "generate-runs") {
       await generateRuns(actionButton);
     } else if (action === "review-change") {
@@ -1831,13 +1851,27 @@
                 <article class="record-card">
                   <div class="record-card-header">
                     <div><h3>${escapeHtml(vehicle.vehicleName)}</h3><p class="record-code">${escapeHtml(vehicle.vehicleCode)}・${escapeHtml(vehicle.plateNumber || "ナンバー未設定")}</p></div>
-                    ${statusBadge(vehicle.vehicleStatus, labels.vehicleStatus)}
+                    ${vehicle.isActive === false
+                      ? statusBadge("inactive", { inactive: "停止" })
+                      : statusBadge(vehicle.vehicleStatus, labels.vehicleStatus)}
                   </div>
                   <div class="record-details">
                     <div class="record-line"><span class="record-label">通常座席</span><span class="record-value">${Number(vehicle.passengerCapacity || 0)}名</span></div>
                     <div class="record-line"><span class="record-label">車いす</span><span class="record-value">${Number(vehicle.wheelchairCapacity || 0)}台</span></div>
                     <div class="record-line"><span class="record-label">リフト</span><span class="record-value">${vehicle.hasLift ? "あり" : "なし"}</span></div>
                   </div>
+                  ${isAdmin ? `
+                    <div class="resource-actions">
+                      <button type="button" class="row-button" data-action="edit-vehicle" data-id="${escapeHtml(vehicle.id)}">編集</button>
+                      <button
+                        type="button"
+                        class="row-button${vehicle.isActive !== false ? " is-danger" : ""}"
+                        data-action="toggle-vehicle-status"
+                        data-id="${escapeHtml(vehicle.id)}"
+                        data-active="${vehicle.isActive === false ? "true" : "false"}"
+                      >${vehicle.isActive === false ? "再開" : "停止"}</button>
+                      <button type="button" class="row-button is-danger" data-action="delete-vehicle" data-id="${escapeHtml(vehicle.id)}">削除</button>
+                    </div>` : ""}
                 </article>`).join("")}
             </div>` : emptyState("▰", "車両が登録されていません", "送迎に使用する車両の定員と装備を登録してください。", isAdmin ? '<button type="button" class="button" data-action="open-vehicle-form">車両を登録</button>' : "")}
         </div>
@@ -1855,6 +1889,18 @@
                     <div class="record-details">
                       <div class="record-line"><span class="record-label">電話番号</span><span class="record-value">${escapeHtml(person.phone || "―")}</span></div>
                     </div>
+                    ${isAdmin ? `
+                      <div class="resource-actions">
+                        <button type="button" class="row-button" data-action="edit-staff" data-id="${escapeHtml(person.id)}">編集</button>
+                        <button
+                          type="button"
+                          class="row-button${person.isActive ? " is-danger" : ""}"
+                          data-action="toggle-staff-status"
+                          data-id="${escapeHtml(person.id)}"
+                          data-active="${person.isActive ? "false" : "true"}"
+                        >${person.isActive ? "停止" : "再開"}</button>
+                        <button type="button" class="row-button is-danger" data-action="delete-staff" data-id="${escapeHtml(person.id)}">削除</button>
+                      </div>` : ""}
                   </article>`).join("")}
               </div>
             </div>` : emptyState("♙", "スタッフが登録されていません", "最初に管理者または配車担当のスタッフIDを作成してください。", isAdmin ? '<button type="button" class="button" data-action="open-staff-form">スタッフを登録</button>' : "")}
@@ -2602,6 +2648,283 @@
     await loadStaff();
     renderResources();
     showToast(`${body.fullName}さんのスタッフIDを登録しました。`);
+  }
+
+  function openVehicleEditForm(vehicleId) {
+    const vehicle = (state.data.vehicles || []).find(
+      (item) => item.id === vehicleId
+    );
+    if (!vehicle) {
+      showToast("対象車両が見つかりません。画面を更新してください。", "error");
+      return;
+    }
+
+    openModal({
+      title: "車両を編集",
+      body: `
+        <form id="vehicle-edit-form" novalidate>
+          <div class="form-grid">
+            <div class="field">
+              <label>車両コード</label>
+              <input value="${escapeHtml(vehicle.vehicleCode)}" disabled>
+              <p class="field-hint">車両コードは履歴参照に使うため変更できません。</p>
+            </div>
+            ${textField("vehicleName", "車両名", { required: true, maxlength: 100, value: vehicle.vehicleName })}
+            ${textField("plateNumber", "ナンバープレート", { maxlength: 50, value: vehicle.plateNumber || "" })}
+            <div class="field">
+              <label for="edit-vehicle-status">車両状態</label>
+              <select id="edit-vehicle-status" name="vehicleStatus">
+                ${Object.entries(labels.vehicleStatus).map(([value, label]) =>
+                  `<option value="${value}"${vehicle.vehicleStatus === value ? " selected" : ""}>${escapeHtml(label)}</option>`
+                ).join("")}
+              </select>
+            </div>
+            ${numberField("passengerCapacity", "通常座席数", 0, 100, Number(vehicle.passengerCapacity || 0))}
+            ${numberField("wheelchairCapacity", "車いす定員", 0, 20, Number(vehicle.wheelchairCapacity || 0))}
+            <div class="field is-full">
+              <label class="check-row">
+                <input type="checkbox" name="hasLift" ${vehicle.hasLift ? "checked" : ""}>
+                <span>リフトを装備している</span>
+              </label>
+            </div>
+          </div>
+        </form>`,
+      footer: modalFormFooter("vehicle-edit-form", "更新する"),
+      onReady: (dialog) =>
+        bindModalForm(dialog, "vehicle-edit-form", (form) =>
+          submitVehicleEdit(form, vehicle)
+        )
+    });
+  }
+
+  async function submitVehicleEdit(form, vehicle) {
+    const body = {
+      expectedUpdatedAt: vehicle.updatedAt,
+      vehicleName: formValue(form, "vehicleName"),
+      plateNumber: nullIfEmpty(formValue(form, "plateNumber")),
+      passengerCapacity: Number(formValue(form, "passengerCapacity")),
+      wheelchairCapacity: Number(formValue(form, "wheelchairCapacity")),
+      hasLift: checked(form, "hasLift"),
+      vehicleStatus: formValue(form, "vehicleStatus")
+    };
+    await api(`/v1/vehicles/${encodeURIComponent(vehicle.id)}`, {
+      method: "PATCH",
+      body
+    });
+    closeModal();
+    await loadVehicles();
+    renderResources();
+    showToast(`${body.vehicleName}を更新しました。`);
+  }
+
+  async function updateVehicleActiveStatus(vehicleId, nextActive, button) {
+    const vehicle = (state.data.vehicles || []).find(
+      (item) => item.id === vehicleId
+    );
+    if (!vehicle) {
+      showToast("対象車両が見つかりません。", "error");
+      return;
+    }
+    const label = nextActive ? "再開" : "停止";
+    if (!window.confirm(
+      `${vehicle.vehicleName}を${label}します。\n過去の運行履歴は削除せず保持します。\n実行しますか？`
+    )) {
+      return;
+    }
+
+    setBusy(button, true, "処理中…");
+    try {
+      await api(`/v1/vehicles/${encodeURIComponent(vehicle.id)}`, {
+        method: "PATCH",
+        body: {
+          expectedUpdatedAt: vehicle.updatedAt,
+          isActive: nextActive,
+          vehicleStatus: nextActive ? "available" : "unavailable"
+        }
+      });
+      await loadVehicles();
+      renderResources();
+      showToast(`${vehicle.vehicleName}を${label}しました。`);
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function softDeleteVehicle(vehicleId, button) {
+    const vehicle = (state.data.vehicles || []).find(
+      (item) => item.id === vehicleId
+    );
+    if (!vehicle) {
+      showToast("対象車両が見つかりません。", "error");
+      return;
+    }
+    if (!window.confirm(
+      `${vehicle.vehicleName}を管理一覧から削除します。\n物理削除はせず、過去の運行履歴は保持されます。\n続けますか？`
+    )) {
+      return;
+    }
+    const reason = window.prompt("削除理由を3文字以上で入力してください。", "使用終了");
+    if (reason === null) return;
+    if (String(reason).trim().length < 3) {
+      showToast("削除理由を3文字以上で入力してください。", "warning");
+      return;
+    }
+
+    setBusy(button, true, "削除中…");
+    try {
+      await api(`/v1/vehicles/${encodeURIComponent(vehicle.id)}/soft-delete`, {
+        method: "POST",
+        body: { reason: String(reason).trim() }
+      });
+      await loadVehicles();
+      renderResources();
+      showToast(`${vehicle.vehicleName}を削除しました。`);
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  function openStaffEditForm(staffId) {
+    const person = (state.data.staff || []).find(
+      (item) => item.id === staffId
+    );
+    if (!person) {
+      showToast("対象スタッフが見つかりません。画面を更新してください。", "error");
+      return;
+    }
+
+    openModal({
+      title: "スタッフを編集",
+      body: `
+        <form id="staff-edit-form" novalidate>
+          <div class="form-grid">
+            <div class="field">
+              <label>スタッフコード</label>
+              <input value="${escapeHtml(person.staffCode)}" disabled>
+              <p class="field-hint">スタッフコードは履歴参照に使うため変更できません。</p>
+            </div>
+            ${textField("fullName", "氏名", { required: true, maxlength: 100, value: person.fullName })}
+            <div class="field">
+              <label for="edit-staff-role">権限<span class="required-mark">必須</span></label>
+              <select id="edit-staff-role" name="staffRole" required>
+                ${Object.entries(labels.roles).map(([value, label]) =>
+                  `<option value="${value}"${person.staffRole === value ? " selected" : ""}>${escapeHtml(label)}</option>`
+                ).join("")}
+              </select>
+            </div>
+            ${textField("phone", "電話番号", { inputmode: "tel", maxlength: 30, value: person.phone || "" })}
+            ${textField("loginId", "ログインID", { required: true, autocomplete: "username", minlength: 3, maxlength: 100, pattern: "[A-Za-z0-9._@-]{3,100}", value: person.loginId || "" })}
+            ${textField("pin", "新しい暗証番号", { type: "password", inputmode: "numeric", autocomplete: "new-password", minlength: 4, maxlength: 64, placeholder: "変更するときだけ入力" })}
+            <div class="field is-full">
+              <p class="demo-note"><strong>暗証番号：</strong>空欄なら現在の暗証番号を維持します。変更時のみ4文字以上で入力してください。</p>
+            </div>
+          </div>
+        </form>`,
+      footer: modalFormFooter("staff-edit-form", "更新する"),
+      onReady: (dialog) =>
+        bindModalForm(dialog, "staff-edit-form", (form) =>
+          submitStaffEdit(form, person)
+        )
+    });
+  }
+
+  async function submitStaffEdit(form, person) {
+    const phone = formValue(form, "phone");
+    if (phone && !isValidPhone(phone)) {
+      throw new Error("電話番号を正しく入力してください。");
+    }
+    const pin = formValue(form, "pin");
+    const body = {
+      expectedUpdatedAt: person.updatedAt,
+      fullName: formValue(form, "fullName"),
+      staffRole: formValue(form, "staffRole"),
+      phone: nullIfEmpty(phone),
+      loginId: formValue(form, "loginId")
+    };
+    if (pin) body.pin = pin;
+
+    await api(`/v1/staff/${encodeURIComponent(person.id)}`, {
+      method: "PATCH",
+      body
+    });
+    closeModal();
+    await loadStaff();
+    renderResources();
+    showToast(`${body.fullName}さんを更新しました。`);
+  }
+
+  async function updateStaffActiveStatus(staffId, nextActive, button) {
+    const person = (state.data.staff || []).find(
+      (item) => item.id === staffId
+    );
+    if (!person) {
+      showToast("対象スタッフが見つかりません。", "error");
+      return;
+    }
+    const label = nextActive ? "再開" : "停止";
+    if (!window.confirm(
+      `${person.fullName}さんを${label}します。\n過去の運行・担当履歴は削除せず保持します。\n実行しますか？`
+    )) {
+      return;
+    }
+
+    setBusy(button, true, "処理中…");
+    try {
+      await api(`/v1/staff/${encodeURIComponent(person.id)}`, {
+        method: "PATCH",
+        body: {
+          expectedUpdatedAt: person.updatedAt,
+          isActive: nextActive
+        }
+      });
+      await loadStaff();
+      renderResources();
+      showToast(`${person.fullName}さんを${label}しました。`);
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function softDeleteStaff(staffId, button) {
+    const person = (state.data.staff || []).find(
+      (item) => item.id === staffId
+    );
+    if (!person) {
+      showToast("対象スタッフが見つかりません。", "error");
+      return;
+    }
+    if (!window.confirm(
+      `${person.fullName}さんを管理一覧から削除します。\n物理削除はせず、過去の担当履歴は保持されます。\n続けますか？`
+    )) {
+      return;
+    }
+    const reason = window.prompt("削除理由を3文字以上で入力してください。", "退職・利用終了");
+    if (reason === null) return;
+    if (String(reason).trim().length < 3) {
+      showToast("削除理由を3文字以上で入力してください。", "warning");
+      return;
+    }
+
+    setBusy(button, true, "削除中…");
+    try {
+      await api(`/v1/staff/${encodeURIComponent(person.id)}/soft-delete`, {
+        method: "POST",
+        body: { reason: String(reason).trim() }
+      });
+      await loadStaff();
+      renderResources();
+      showToast(`${person.fullName}さんを削除しました。`);
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
   }
 
   async function openLocationForm() {
