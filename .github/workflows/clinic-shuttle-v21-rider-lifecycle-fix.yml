@@ -1,0 +1,53 @@
+name: CLINIC_SHUTTLE V2.1 Rider Lifecycle Fix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-rider-lifecycle-fix.yml'
+      - '.github/workflows/clinic-shuttle-v21-rider-lifecycle-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  rider-lifecycle-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply rider lifecycle patch
+        run: python .github/workflows/clinic-shuttle-v21-rider-lifecycle-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check worker.js
+          node --check shuttle.js
+          grep -q 'excludeRiderId = null' worker.js
+          grep -q 'nextFullName' worker.js
+          grep -q 'data-action="edit-rider"' shuttle.js
+          grep -q 'data-action="toggle-rider-status"' shuttle.js
+          grep -q 'function openRiderEditForm' shuttle.js
+          grep -q 'function updateRiderActiveStatus' shuttle.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add worker.js shuttle.js
+          git commit -m "Add rider edit and active-stop lifecycle"
+          git push
