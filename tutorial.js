@@ -141,7 +141,10 @@
   function updateLauncherLabel(launcher = document.getElementById("dpro-tutorial-launcher")) {
     if (!launcher) return;
     const progress = readProgress();
-    launcher.textContent = progress && !progress.completed ? "操作ガイド（続きから）" : "操作ガイド";
+    const completed = progress?.completed === true;
+    launcher.hidden = completed;
+    launcher.setAttribute("aria-hidden", completed ? "true" : "false");
+    launcher.textContent = progress && !completed ? "操作ガイド（続きから）" : "操作ガイド";
   }
 
   function progressIndex(progress) {
@@ -312,6 +315,11 @@
 
   function start(index = 0) {
     if (!state.steps.length) return;
+    const launcher = document.getElementById("dpro-tutorial-launcher");
+    if (launcher) {
+      launcher.hidden = false;
+      launcher.setAttribute("aria-hidden", "false");
+    }
     state.index = clamp(Number(index) || 0, 0, state.steps.length - 1);
     state.open = true;
     renderStep();
@@ -343,14 +351,14 @@
 
   function skip() {
     saveProgress(state.steps[state.index]?.id || state.steps[0]?.id, true);
-    updateLauncherLabel();
     close(false);
+    updateLauncherLabel();
   }
 
   function finish() {
     saveProgress(state.steps[state.steps.length - 1]?.id, true);
-    updateLauncherLabel();
     close(false);
+    updateLauncherLabel();
   }
 
   function autoResumeFromQuery() {
