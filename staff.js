@@ -638,6 +638,10 @@ function createStaffApplication() {
               <p>${escapeHtml(formatServiceDate(state.serviceDate))}・${escapeHtml(state.facility?.facilityName || "DPRO 診療所送迎予約")}</p>
             </div>
             <div class="head-actions">
+              <label class="staff-date-control">
+                <span class="sr-only">表示日</span>
+                <input type="date" id="staff-service-date" value="${escapeHtml(state.serviceDate)}" aria-label="表示日">
+              </label>
               <button type="button" class="icon-button" data-action="refresh" aria-label="担当便を更新" title="担当便を更新">↻</button>
               <button type="button" class="icon-button" data-action="logout" aria-label="ログアウト" title="ログアウト">⇥</button>
             </div>
@@ -653,6 +657,17 @@ function createStaffApplication() {
           </div>
         </main>
       </div>`;
+    document.getElementById("staff-service-date")
+      ?.addEventListener("change", async (event) => {
+        const value = String(event.target.value || "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+        state.serviceDate = value;
+        const url = new URL(window.location.href);
+        url.searchParams.set("serviceDate", value);
+        window.history.replaceState(null, "", url);
+        renderShell();
+        await loadRuns();
+      });
     app.querySelector('[data-action="refresh"]')
       ?.addEventListener("click", (event) => loadRuns(event.currentTarget));
     app.querySelector('[data-action="logout"]')
