@@ -1,0 +1,49 @@
+name: CLINIC_SHUTTLE V2.1 Guide Reopen Entry
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-guide-reopen-entry.yml'
+      - '.github/workflows/clinic-shuttle-v21-guide-reopen-entry-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  guide-reopen-entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/workflows/clinic-shuttle-v21-guide-reopen-entry-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check shuttle.js
+          grep -q 'owner.html?tutorial=replay' shuttle.js
+          grep -q 'guide-center.html' shuttle.js
+          grep -q '操作ガイドをもう一度見る' shuttle.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add shuttle.js
+          git commit -m "Add guide reopen entry to account menu"
+          git push
