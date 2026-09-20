@@ -1,0 +1,48 @@
+name: CLINIC_SHUTTLE V2.1 First Use Guide
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-first-use-guide.yml'
+      - '.github/workflows/clinic-shuttle-v21-first-use-guide-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  first-use-guide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/workflows/clinic-shuttle-v21-first-use-guide-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tutorial.js
+          grep -q 'launcher.hidden = completed;' tutorial.js
+          grep -q 'aria-hidden' tutorial.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add tutorial.js
+          git commit -m "Hide operation guide after first use"
+          git push
