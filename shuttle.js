@@ -2116,7 +2116,7 @@
       footer: `
         <a class="button button-secondary" href="owner.html?tutorial=replay">操作ガイドをもう一度見る</a>
         <a class="button button-secondary" href="guide-center.html">ガイドセンター</a>
-        <a class="button button-secondary" href="staff.html">現場スタッフ画面</a>
+        <a class="button button-secondary" href="staff.html?serviceDate=${encodeURIComponent(state.serviceDate)}">現場スタッフ画面</a>
         <a class="button button-secondary" href="member.html?demo=1">家族デモ画面</a>
         <button type="button" class="button button-secondary" data-modal-close-button>閉じる</button>
         <button type="button" class="button button-danger" data-account-logout>ログアウト</button>`,
@@ -3393,7 +3393,7 @@
               </table>
             </div>` : emptyState("♙", "患者の割当はありません", "この便にはまだ患者が割り当てられていません。", "")}
         </section>`,
-      footer: '<a class="button button-secondary" href="staff.html">現場スタッフ画面</a><button type="button" class="button" data-modal-close-button>閉じる</button>',
+      footer: `<a class="button button-secondary" href="staff.html?serviceDate=${encodeURIComponent(state.serviceDate)}">現場スタッフ画面</a><button type="button" class="button" data-modal-close-button>閉じる</button>`,
       onReady: (dialog) => {
         dialog.querySelector("[data-modal-close-button]")
           ?.addEventListener("click", closeModal);

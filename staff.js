@@ -196,12 +196,19 @@ function createStaffApplication() {
   const eventForm = document.getElementById("event-form");
   const eventAttemptKeys = new Map();
 
+  const requestedServiceDate = query.get("serviceDate");
+  const initialServiceDate =
+    typeof requestedServiceDate === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(requestedServiceDate)
+      ? requestedServiceDate
+      : jstDateString();
+
   const state = {
     token: null,
     role: null,
     staff: null,
     facility: null,
-    serviceDate: jstDateString(),
+    serviceDate: initialServiceDate,
     runs: [],
     loading: false,
     pendingEvent: null
@@ -627,7 +634,7 @@ function createStaffApplication() {
         <main class="main">
           <section class="page-head">
             <div>
-              <h1>本日の担当便</h1>
+              <h1>${state.serviceDate === jstDateString() ? "本日の担当便" : "選択日の担当便"}</h1>
               <p>${escapeHtml(formatServiceDate(state.serviceDate))}・${escapeHtml(state.facility?.facilityName || "DPRO 診療所送迎予約")}</p>
             </div>
             <div class="head-actions">
