@@ -1,0 +1,92 @@
+name: CLINIC_SHUTTLE V2.1 UI Timezone Fix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-ui-timezone-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  ui-timezone-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch clinic shuttle UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path("shuttle.js")
+          s = p.read_text(encoding="utf-8")
+
+          old = '''  function formatTime(value) {
+              if (!value) return "―";
+              const match = String(value).match(/T(\\d{2}):(\\d{2})/);
+              if (match) return `${match[1]}:${match[2]}`;
+              const timeMatch = String(value).match(/^(\\d{2}):(\\d{2})/);
+              return timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : "―";
+            }'''
+          new = '''  function formatTime(value) {
+              if (!value) return "―";
+              const raw = String(value);
+              const timeMatch = raw.match(/^(\\d{2}):(\\d{2})/);
+              if (timeMatch) return `${timeMatch[1]}:${timeMatch[2]}`;
+
+              const date = new Date(raw);
+              if (!Number.isNaN(date.getTime())) {
+                return new Intl.DateTimeFormat("ja-JP", {
+                  timeZone: "Asia/Tokyo",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false
+                }).format(date);
+              }
+              return "―";
+            }'''
+          if old not in s:
+              raise SystemExit("formatTime anchor not found")
+          s = s.replace(old, new, 1)
+
+          s = s.replace("本日の便を生成", "選択日の便を生成")
+          s = s.replace("本日の運行予定", "選択日の運行予定")
+          s = s.replace("診療所送迎予約 LINE", "診療所送迎予約")
+          s = s.replace('facilityName: "デモ福祉送迎センター"', 'facilityName: "DPRO 診療所送迎予約 デモ診療所"')
+          s = s.replace("scheduleStepMinutes: 5", "scheduleStepMinutes: 30")
+
+          p.write_text(s, encoding="utf-8", newline="\n")
+          PY
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check shuttle.js
+          grep -q 'timeZone: "Asia/Tokyo"' shuttle.js
+          grep -q '選択日の便を生成' shuttle.js
+          grep -q '選択日の運行予定' shuttle.js
+          ! grep -q 'scheduleStepMinutes: 5' shuttle.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add shuttle.js
+          git commit -m "Fix CLINIC_SHUTTLE JST time display"
+          git push
