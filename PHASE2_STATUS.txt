@@ -1,0 +1,54 @@
+DPRO 診療所送迎予約 / PHASE 2 STATUS
+
+PHASE 1:
+PASS
+GitHub HEAD baseline: 27ce01ed3ac05182e4e4a4c78517db048c4dd86b
+
+SUPABASE PHASE 2:
+PASS
+Project: cbknucemarcpbscirzyv
+Schema: dpro_clinic_shuttle
+Database version: CLINIC-SHUTTLE-V2.1-DB-R2-20260920
+Schema check: ok=true
+Tables: 25
+Functions: 28
+Reservation slot: 30 minutes
+Missing tables: 0
+RLS-disabled tables: 0
+Cross-talk functions to public.shuttle_*: 0
+Cross-talk triggers to public.shuttle_*: 0
+
+IMPLEMENTED IN DB:
+- Dedicated CLINIC_SHUTTLE schema
+- Proven shuttle core cloned and fully schema-isolated
+- 30-minute reservation policy
+- Past-date reservation guard
+- Clinic shuttle reservations
+- Round trip / outbound only / return only
+- Fixed return time / return-after-visit-ready
+- Reservation status history
+- CONTACT HUB events
+- Staff and vehicle soft-delete foundation
+- In-use delete guards
+- Audit history
+- Server-only direct DB access model
+
+IMPLEMENTED BY THIS GITHUB PATCH:
+- Reservation REST API
+- Reservation change/cancel/return-ready API
+- CONTACT HUB API
+- Staff/vehicle soft-delete API
+- Patient empty-search guard
+- Explicit all-patient list capped at 100
+- Deleted resources hidden from normal lists
+- System Check 30-minute / DB R2 expectation
+- Remove Python cache artifacts
+
+NOT FINAL:
+- Supabase Data API must expose dpro_clinic_shuttle
+- Cloudflare Worker env/secrets + deploy
+- Owner reservation/settings UI
+- Patient/family WEB/LINE reservation UI
+- CONTACT HUB owner UI
+- cross-role runtime QA
+- FINAL 4/4 and FINAL LOCK

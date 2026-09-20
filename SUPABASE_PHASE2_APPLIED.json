@@ -1,0 +1,30 @@
+{
+  "schema_version": "DPRO_CLINIC_SHUTTLE_SUPABASE_PHASE2_APPLIED_V1",
+  "recorded_at": "2026-09-20T11:40:51+09:00",
+  "project_ref": "cbknucemarcpbscirzyv",
+  "schema": "dpro_clinic_shuttle",
+  "migrations_applied": [
+    "clinic_shuttle_v21_phase2_clone",
+    "clinic_shuttle_v21_phase2_domain"
+  ],
+  "verification": {
+    "schema_check_ok": true,
+    "database_version": "CLINIC-SHUTTLE-V2.1-DB-R2-20260920",
+    "table_count": 25,
+    "function_count": 28,
+    "reservation_slot_minutes": 30,
+    "missing_tables": [],
+    "rls_disabled_tables": [],
+    "cross_talk_trigger_count": 0,
+    "cross_talk_function_count": 0
+  },
+  "security_model": {
+    "browser_direct_db_access": false,
+    "anon_grants": "revoked",
+    "authenticated_grants": "revoked",
+    "worker_role": "service_role",
+    "rls_enabled": true,
+    "note": "RLS-without-policy advisor INFO is intentional for the server-only custom schema boundary."
+  },
+  "data_api_next_step": "Add dpro_clinic_shuttle to Supabase Data API Exposed schemas before Worker runtime QA."
+}
