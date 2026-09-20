@@ -3579,11 +3579,11 @@ async function handleRegularScheduleCreate(
       body.dropoffLocationId,
       "降車場所ID"
     ),
-    scheduled_pickup_time: requireTime(
+    scheduled_pickup_time: requireThirtyMinuteTime(
       body.scheduledPickupTime,
       "乗車予定時刻"
     ),
-    scheduled_dropoff_time: requireTime(
+    scheduled_dropoff_time: requireThirtyMinuteTime(
       body.scheduledDropoffTime,
       "降車予定時刻"
     ),
@@ -3592,6 +3592,10 @@ async function handleRegularScheduleCreate(
     notes: optionalString(body.notes, "備考", 1, 1000),
     is_active: optionalBoolean(body.isActive, true, "有効状態"),
   };
+  assertNotPastJstDate(
+    payload.effective_from,
+    "過去日を適用開始日には指定できません。"
+  );
   await assertRegularScheduleRules(
     env,
     session.facilityId,
@@ -3686,13 +3690,13 @@ async function handleRegularScheduleUpdate(
     );
   }
   if (body.scheduledPickupTime !== undefined) {
-    changes.scheduled_pickup_time = requireTime(
+    changes.scheduled_pickup_time = requireThirtyMinuteTime(
       body.scheduledPickupTime,
       "乗車予定時刻"
     );
   }
   if (body.scheduledDropoffTime !== undefined) {
-    changes.scheduled_dropoff_time = requireTime(
+    changes.scheduled_dropoff_time = requireThirtyMinuteTime(
       body.scheduledDropoffTime,
       "降車予定時刻"
     );
@@ -3701,6 +3705,10 @@ async function handleRegularScheduleUpdate(
     changes.effective_from = requireDate(
       body.effectiveFrom,
       "適用開始日"
+    );
+    assertNotPastJstDate(
+      changes.effective_from,
+      "過去日を新しい適用開始日には指定できません。"
     );
   }
   if (body.effectiveTo !== undefined) {

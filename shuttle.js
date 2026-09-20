@@ -1180,6 +1180,14 @@
       await openLocationForm();
     } else if (action === "open-schedule-form") {
       await openScheduleForm();
+    } else if (action === "edit-schedule") {
+      await openScheduleEditForm(actionButton.dataset.id);
+    } else if (action === "toggle-schedule-status") {
+      await updateScheduleActiveStatus(
+        actionButton.dataset.id,
+        actionButton.dataset.active === "true",
+        actionButton
+      );
     } else if (action === "open-vehicle-form") {
       openVehicleForm();
     } else if (action === "open-staff-form") {
@@ -1711,14 +1719,14 @@
           <header class="panel-header">
             <div>
               <h2 class="panel-title">曜日別予定</h2>
-              <p class="panel-subtitle">時間は5分単位、診療所の運行時間内で登録します。</p>
+              <p class="panel-subtitle">時間は30分単位、診療所の運行時間内で登録します。</p>
             </div>
             <span class="status-badge status-active">${schedules.length}件</span>
           </header>
           ${schedules.length ? `
             <div class="data-table-wrap">
               <table class="data-table">
-                <thead><tr><th>曜日・患者</th><th>区分</th><th>時間</th><th>乗車場所</th><th>降車場所</th><th>状態</th></tr></thead>
+                <thead><tr><th>曜日・患者</th><th>区分</th><th>時間</th><th>適用期間</th><th>乗車場所</th><th>降車場所</th><th>状態</th><th><span class="sr-only">操作</span></th></tr></thead>
                 <tbody>
                   ${schedules.map((schedule) => {
                     const rider = riderById.get(schedule.riderId);
@@ -1726,9 +1734,22 @@
                       <td class="cell-primary" data-label="曜日・患者"><span class="primary-cell">${escapeHtml(labels.days[schedule.dayOfWeek])}曜日・${escapeHtml(rider?.fullName || "患者不明")}</span><span class="secondary-cell">${escapeHtml(schedule.routeGroupCode || "A")}</span></td>
                       <td data-label="区分">${escapeHtml(labels.serviceType[schedule.serviceType] || schedule.serviceType)}</td>
                       <td data-label="時間">${escapeHtml(formatTime(schedule.scheduledPickupTime))} → ${escapeHtml(formatTime(schedule.scheduledDropoffTime))}</td>
+                      <td data-label="適用期間">${escapeHtml(schedule.effectiveFrom || "―")} ～ ${escapeHtml(schedule.effectiveTo || "継続")}</td>
                       <td data-label="乗車場所">${escapeHtml(locationById.get(schedule.pickupLocationId)?.locationName || "―")}</td>
                       <td data-label="降車場所">${escapeHtml(locationById.get(schedule.dropoffLocationId)?.locationName || "―")}</td>
                       <td data-label="状態">${statusBadge(schedule.isActive ? "active" : "inactive", { active: "有効", inactive: "停止" })}</td>
+                      <td data-label="操作">
+                        <div class="row-actions">
+                          <button type="button" class="row-button" data-action="edit-schedule" data-id="${escapeHtml(schedule.id)}">編集</button>
+                          <button
+                            type="button"
+                            class="row-button${schedule.isActive ? " is-danger" : ""}"
+                            data-action="toggle-schedule-status"
+                            data-id="${escapeHtml(schedule.id)}"
+                            data-active="${schedule.isActive ? "false" : "true"}"
+                          >${schedule.isActive ? "停止" : "再開"}</button>
+                        </div>
+                      </td>
                     </tr>`;
                   }).join("")}
                 </tbody>
@@ -2681,7 +2702,7 @@
             </div>
             ${timeField("scheduledPickupTime", "乗車予定時刻", "08:30")}
             ${timeField("scheduledDropoffTime", "降車予定時刻", "09:00")}
-            ${dateField("effectiveFrom", "適用開始日", today, true)}
+            ${dateField("effectiveFrom", "適用開始日", today, true, today)}
             ${dateField("effectiveTo", "適用終了日", "", false)}
             <div class="field is-full">
               <label for="schedule-notes">備考</label>
@@ -2697,14 +2718,18 @@
   async function submitSchedule(form) {
     const pickup = formValue(form, "scheduledPickupTime");
     const dropoff = formValue(form, "scheduledDropoffTime");
-    if (!isFiveMinuteStep(pickup) || !isFiveMinuteStep(dropoff)) {
-      throw new Error("送迎時刻は5分単位で入力してください。");
+    if (!isThirtyMinuteStep(pickup) || !isThirtyMinuteStep(dropoff)) {
+      throw new Error("送迎時刻は30分単位（00分・30分）で選択してください。");
     }
     if (dropoff <= pickup) {
       throw new Error("降車予定時刻は乗車予定時刻より後にしてください。");
     }
     const effectiveFrom = formValue(form, "effectiveFrom");
     const effectiveTo = formValue(form, "effectiveTo");
+    const today = jstDateString(new Date());
+    if (effectiveFrom < today) {
+      throw new Error("過去日を適用開始日には指定できません。");
+    }
     if (effectiveTo && effectiveTo < effectiveFrom) {
       throw new Error("適用終了日は開始日以降にしてください。");
     }
@@ -2726,6 +2751,173 @@
     await loadSchedules();
     renderSchedules();
     showToast("定期送迎予定を登録しました。");
+  }
+
+  async function openScheduleEditForm(scheduleId) {
+    const schedule = (state.data.regularSchedules || []).find(
+      (item) => item.id === scheduleId
+    );
+    if (!schedule) {
+      showToast("対象の定期予定が見つかりません。画面を更新してください。", "error");
+      return;
+    }
+
+    const rider = (state.data.riders || []).find(
+      (item) => item.id === schedule.riderId
+    );
+
+    openModal({
+      title: "定期送迎予定を編集",
+      wide: true,
+      body: `
+        <form id="schedule-edit-form" novalidate>
+          <div class="form-grid">
+            <div class="field">
+              <label>患者</label>
+              <input value="${escapeHtml(rider?.fullName || "患者不明")}" disabled>
+              <p class="field-hint">患者を変更する場合は、新しい定期予定として登録してください。</p>
+            </div>
+            <div class="field">
+              <label for="edit-schedule-day">曜日<span class="required-mark">必須</span></label>
+              <select id="edit-schedule-day" name="dayOfWeek" required>
+                ${labels.days.map((day, index) => `<option value="${index}"${Number(schedule.dayOfWeek) === index ? " selected" : ""}>${day}曜日</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="edit-service-type">送迎区分<span class="required-mark">必須</span></label>
+              <select id="edit-service-type" name="serviceType" required>
+                ${Object.entries(labels.serviceType).map(([value, label]) => `<option value="${value}"${schedule.serviceType === value ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}
+              </select>
+            </div>
+            ${textField("routeGroupCode", "ルートコード", { required: true, maxlength: 30, value: schedule.routeGroupCode || "A" })}
+            <div class="field">
+              <label for="edit-pickup-location">乗車場所<span class="required-mark">必須</span></label>
+              <select id="edit-pickup-location" name="pickupLocationId" required>
+                <option value="">選択してください</option>
+                ${state.data.locations.map((location) => `<option value="${escapeHtml(location.id)}"${location.id === schedule.pickupLocationId ? " selected" : ""}>${escapeHtml(location.locationName)}（${location.locationType === "facility" ? "施設共通" : "患者別"}）</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="edit-dropoff-location">降車場所<span class="required-mark">必須</span></label>
+              <select id="edit-dropoff-location" name="dropoffLocationId" required>
+                <option value="">選択してください</option>
+                ${state.data.locations.map((location) => `<option value="${escapeHtml(location.id)}"${location.id === schedule.dropoffLocationId ? " selected" : ""}>${escapeHtml(location.locationName)}（${location.locationType === "facility" ? "施設共通" : "患者別"}）</option>`).join("")}
+              </select>
+            </div>
+            ${timeField("scheduledPickupTime", "乗車予定時刻", formatTime(schedule.scheduledPickupTime))}
+            ${timeField("scheduledDropoffTime", "降車予定時刻", formatTime(schedule.scheduledDropoffTime))}
+            ${dateField("effectiveFrom", "適用開始日", schedule.effectiveFrom || "", true)}
+            ${dateField("effectiveTo", "適用終了日", schedule.effectiveTo || "", false)}
+            <div class="field is-full">
+              <label for="edit-schedule-notes">備考</label>
+              <textarea id="edit-schedule-notes" name="notes" maxlength="1000">${escapeHtml(schedule.notes || "")}</textarea>
+            </div>
+          </div>
+        </form>`,
+      footer: modalFormFooter("schedule-edit-form", "更新する"),
+      onReady: (dialog) => {
+        bindModalForm(
+          dialog,
+          "schedule-edit-form",
+          (form) => submitScheduleEdit(form, schedule)
+        );
+      }
+    });
+  }
+
+  async function submitScheduleEdit(form, schedule) {
+    const pickup = formValue(form, "scheduledPickupTime");
+    const dropoff = formValue(form, "scheduledDropoffTime");
+    if (!isThirtyMinuteStep(pickup) || !isThirtyMinuteStep(dropoff)) {
+      throw new Error("送迎時刻は30分単位（00分・30分）で選択してください。");
+    }
+    if (dropoff <= pickup) {
+      throw new Error("降車予定時刻は乗車予定時刻より後にしてください。");
+    }
+
+    const effectiveFrom = formValue(form, "effectiveFrom");
+    const effectiveTo = formValue(form, "effectiveTo");
+    if (effectiveTo && effectiveTo < effectiveFrom) {
+      throw new Error("適用終了日は開始日以降にしてください。");
+    }
+    if (
+      effectiveFrom !== schedule.effectiveFrom &&
+      effectiveFrom < jstDateString(new Date())
+    ) {
+      throw new Error("過去日を新しい適用開始日には指定できません。");
+    }
+
+    await api(
+      `/v1/regular-schedules/${encodeURIComponent(schedule.id)}`,
+      {
+        method: "PATCH",
+        body: {
+          expectedUpdatedAt: schedule.updatedAt,
+          dayOfWeek: Number(formValue(form, "dayOfWeek")),
+          serviceType: formValue(form, "serviceType"),
+          routeGroupCode: formValue(form, "routeGroupCode"),
+          pickupLocationId: formValue(form, "pickupLocationId"),
+          dropoffLocationId: formValue(form, "dropoffLocationId"),
+          scheduledPickupTime: pickup,
+          scheduledDropoffTime: dropoff,
+          effectiveFrom,
+          effectiveTo: nullIfEmpty(effectiveTo),
+          notes: nullIfEmpty(formValue(form, "notes"))
+        }
+      }
+    );
+
+    closeModal();
+    await loadSchedules();
+    renderSchedules();
+    showToast("定期送迎予定を更新しました。");
+  }
+
+  async function updateScheduleActiveStatus(
+    scheduleId,
+    nextActive,
+    button
+  ) {
+    const schedule = (state.data.regularSchedules || []).find(
+      (item) => item.id === scheduleId
+    );
+    if (!schedule) {
+      showToast("対象の定期予定が見つかりません。", "error");
+      return;
+    }
+
+    const rider = (state.data.riders || []).find(
+      (item) => item.id === schedule.riderId
+    );
+    const actionLabel = nextActive ? "再開" : "停止";
+    if (
+      !window.confirm(
+        `${rider?.fullName || "この患者"}の定期予定を${actionLabel}します。\n過去の運行履歴は削除せず保持します。\n実行しますか？`
+      )
+    ) {
+      return;
+    }
+
+    setBusy(button, true, "処理中…");
+    try {
+      await api(
+        `/v1/regular-schedules/${encodeURIComponent(schedule.id)}`,
+        {
+          method: "PATCH",
+          body: {
+            expectedUpdatedAt: schedule.updatedAt,
+            isActive: nextActive
+          }
+        }
+      );
+      await loadSchedules();
+      renderSchedules();
+      showToast(`定期送迎予定を${actionLabel}しました。`);
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
   }
 
   function openReviewForm(requestId, decision) {
@@ -3185,12 +3377,12 @@
       </div>`;
   }
 
-  function dateField(name, label, value, required) {
+  function dateField(name, label, value, required, minValue = "") {
     const id = name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
     return `
       <div class="field">
         <label for="${id}">${escapeHtml(label)}${required ? '<span class="required-mark">必須</span>' : ""}</label>
-        <input id="${id}" name="${escapeHtml(name)}" type="date" ${required ? "required" : ""} value="${escapeHtml(value)}">
+        <input id="${id}" name="${escapeHtml(name)}" type="date" ${required ? "required" : ""} ${minValue ? `min="${escapeHtml(minValue)}"` : ""} value="${escapeHtml(value)}">
       </div>`;
   }
 
@@ -3209,9 +3401,9 @@
     return /^0\d{9,10}$/.test(digits);
   }
 
-  function isFiveMinuteStep(value) {
+  function isThirtyMinuteStep(value) {
     const match = String(value).match(/^(\d{2}):(\d{2})$/);
-    return Boolean(match && Number(match[2]) % 5 === 0);
+    return Boolean(match && ["00", "30"].includes(match[2]));
   }
 
   function initialize() {
