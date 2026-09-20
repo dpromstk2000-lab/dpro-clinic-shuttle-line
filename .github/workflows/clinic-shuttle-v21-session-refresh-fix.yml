@@ -1,0 +1,250 @@
+name: CLINIC_SHUTTLE V2.1 Session Refresh Fix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-session-refresh-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  session-refresh-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Worker and UIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          # Worker refresh endpoint
+          p = Path('worker.js')
+          s = p.read_text(encoding='utf-8')
+
+          route_anchor = '''        case "POST /v1/auth/logout":
+          return await handleLogout(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+'''
+          route_repl = '''        case "POST /v1/auth/refresh":
+          return await handleRefreshSession(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "POST /v1/auth/logout":
+          return await handleLogout(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+'''
+          if route_anchor not in s:
+              raise SystemExit('worker refresh route anchor not found')
+          s = s.replace(route_anchor, route_repl, 1)
+
+          handler_anchor = '''async function handleLogout(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {'''
+          handler_repl = '''async function handleRefreshSession(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  await readJsonObject(request, { allowEmpty: true });
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+    "guardian",
+  ]);
+
+  const facility = await findFacilityById(env, session.facilityId);
+  assertFacilityEnvironment(facility, env);
+
+  const token = await issueSessionToken(
+    {
+      subject: session.subject,
+      facilityId: session.facilityId,
+      actorType: session.actorType,
+      actorId: session.actorId,
+      role: session.role,
+      displayName: session.displayName || "",
+    },
+    env
+  );
+
+  if (session.actorType === "staff" && isUuid(session.actorId)) {
+    await revokeStaffSession(
+      env,
+      session.facilityId,
+      session.actorId,
+      session.jti,
+      "session_refresh"
+    );
+  }
+
+  return successResponse(
+    {
+      token,
+      expiresIn: getTokenTtlSeconds(env),
+      role: session.role,
+      facility: publicFacility(facility),
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleLogout(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {'''
+          if handler_anchor not in s:
+              raise SystemExit('worker handler anchor not found')
+          s = s.replace(handler_anchor, handler_repl, 1)
+          p.write_text(s, encoding='utf-8', newline='\n')
+
+          def patch_ui(path):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              anchor = '''  async function api(path, options = {}) {
+    if (mockMode) return mockApi(path, options);
+    const base = String(config.apiBaseUrl || "").replace(/\\/+$/, "");
+    if (!base.startsWith("https://")) {
+      throw new Error("API接続先が正しく設定されていません。");
+    }
+'''
+              repl = '''  let sessionRefreshPromise = null;
+
+  function tokenSecondsRemaining(token) {
+    try {
+      const payloadPart = String(token || "").split(".")[1];
+      if (!payloadPart) return 0;
+      const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+      const payload = JSON.parse(atob(padded));
+      return Number(payload.exp || 0) - Math.floor(Date.now() / 1000);
+    } catch {
+      return 0;
+    }
+  }
+
+  async function refreshSessionIfNeeded() {
+    if (!state.token) return;
+    const remaining = tokenSecondsRemaining(state.token);
+    if (remaining <= 0 || remaining > 600) return;
+    if (sessionRefreshPromise) return sessionRefreshPromise;
+
+    const base = String(config.apiBaseUrl || "").replace(/\\/+$/, "");
+    sessionRefreshPromise = (async () => {
+      const response = await fetch(`${base}/v1/auth/refresh`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`
+        },
+        body: "{}",
+        cache: "no-store"
+      });
+      let payload = {};
+      try { payload = await response.json(); } catch { payload = {}; }
+      if (!response.ok || payload.ok === false || !payload.token) {
+        throw new Error(
+          payload?.error?.message ||
+          "ログインの有効期限が切れました。もう一度ログインしてください。"
+        );
+      }
+      state.token = payload.token;
+      saveSession();
+    })().finally(() => {
+      sessionRefreshPromise = null;
+    });
+    return sessionRefreshPromise;
+  }
+
+  async function api(path, options = {}) {
+    if (mockMode) return mockApi(path, options);
+    const base = String(config.apiBaseUrl || "").replace(/\\/+$/, "");
+    if (!base.startsWith("https://")) {
+      throw new Error("API接続先が正しく設定されていません。");
+    }
+    if (state.token && !path.startsWith("/v1/auth/")) {
+      try {
+        await refreshSessionIfNeeded();
+      } catch {
+        // 本リクエスト側の401処理で安全にログイン画面へ戻す。
+      }
+    }
+'''
+              if anchor not in s:
+                  raise SystemExit(f'{path} api anchor not found')
+              s = s.replace(anchor, repl, 1)
+              p.write_text(s, encoding='utf-8', newline='\n')
+
+          patch_ui('shuttle.js')
+          patch_ui('staff.js')
+
+          # Wrangler: 30-minute session window. Active sessions refresh before expiry.
+          p = Path('wrangler.jsonc')
+          s = p.read_text(encoding='utf-8')
+          if '"SESSION_TTL_SECONDS"' not in s:
+              s = s.replace(
+                  '"SUPABASE_URL": "https://cbknucemarcpbscirzyv.supabase.co"',
+                  '"SUPABASE_URL": "https://cbknucemarcpbscirzyv.supabase.co",\n    "SESSION_TTL_SECONDS": "1800"'
+              )
+          p.write_text(s, encoding='utf-8', newline='\n')
+          PY
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check worker.js
+          node --check shuttle.js
+          node --check staff.js
+          grep -q 'POST /v1/auth/refresh' worker.js
+          grep -q 'handleRefreshSession' worker.js
+          grep -q 'refreshSessionIfNeeded' shuttle.js
+          grep -q 'refreshSessionIfNeeded' staff.js
+          grep -q '"SESSION_TTL_SECONDS": "1800"' wrangler.jsonc
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add worker.js shuttle.js staff.js wrangler.jsonc
+          git commit -m "Add active session refresh for CLINIC_SHUTTLE"
+          git push
