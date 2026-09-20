@@ -328,7 +328,7 @@ function createStaffApplication() {
         },
         facility: {
           facilityCode: config.facilityCode,
-          facilityName: "DPRO 福祉施設送迎 デモ事業所",
+          facilityName: "DPRO 診療所送迎予約 デモ診療所",
           environment: "demo"
         }
       });
@@ -356,9 +356,9 @@ function createStaffApplication() {
             staff: { fullName: "デモ 運転員" }
           }],
           stops: [
-            mockStop("1", 1, "デモ 利用者A", "confirmed", false, true, "08:05"),
-            mockStop("2", 2, "デモ 利用者B", "en_route", true, true, "08:20"),
-            mockStop("3", 3, "デモ 利用者C", "completed", false, false, "08:35")
+            mockStop("1", 1, "デモ 患者A", "confirmed", false, true, "08:05"),
+            mockStop("2", 2, "デモ 患者B", "en_route", true, true, "08:20"),
+            mockStop("3", 3, "デモ 患者C", "completed", false, false, "08:35")
           ]
         }];
       }
@@ -437,12 +437,12 @@ function createStaffApplication() {
     app.removeAttribute("aria-busy");
     app.innerHTML = `
       <main class="login-page">
-        <section class="login-brand" aria-label="DPRO福祉施設送迎">
+        <section class="login-brand" aria-label="DPRO診療所送迎予約">
           <div class="brand-lockup">
             <span class="brand-mark" aria-hidden="true">▰</span>
             <div>
               <p class="brand-name">DPRO</p>
-              <p class="brand-subtitle">福祉施設送迎 LINE</p>
+              <p class="brand-subtitle">診療所送迎予約 LINE</p>
             </div>
           </div>
           <div class="login-message">
@@ -454,14 +454,14 @@ function createStaffApplication() {
           <div class="login-panel">
             <p class="eyebrow">現場スタッフ画面</p>
             <h2>ログイン</h2>
-            <p class="login-lead">事業所から発行されたスタッフIDを入力してください。</p>
+            <p class="login-lead">診療所から発行されたスタッフIDを入力してください。</p>
             <div class="login-card">
               ${errorMessage
                 ? `<p class="login-error" role="alert">${escapeHtml(errorMessage)}</p>`
                 : ""}
               <form id="staff-login-form" novalidate>
                 <div class="field">
-                  <label for="facility-code">事業所コード<span class="required">必須</span></label>
+                  <label for="facility-code">診療所コード<span class="required">必須</span></label>
                   <input id="facility-code" name="facilityCode" type="text" autocomplete="organization" required maxlength="80" value="${escapeHtml(config.facilityCode || "")}">
                 </div>
                 <div class="field">
@@ -546,7 +546,7 @@ function createStaffApplication() {
             <span class="brand-mark" aria-hidden="true">▰</span>
             <div>
               <p class="brand-name">DPRO</p>
-              <p class="brand-subtitle">福祉施設送迎 現場</p>
+              <p class="brand-subtitle">診療所送迎予約 現場</p>
             </div>
           </div>
           <div class="staff-identity">
@@ -558,7 +558,7 @@ function createStaffApplication() {
           <section class="page-head">
             <div>
               <h1>本日の担当便</h1>
-              <p>${escapeHtml(formatServiceDate(state.serviceDate))}・${escapeHtml(state.facility?.facilityName || "DPRO 福祉施設送迎")}</p>
+              <p>${escapeHtml(formatServiceDate(state.serviceDate))}・${escapeHtml(state.facility?.facilityName || "DPRO 診療所送迎予約")}</p>
             </div>
             <div class="head-actions">
               <button type="button" class="icon-button" data-action="refresh" aria-label="担当便を更新" title="担当便を更新">↻</button>
@@ -667,7 +667,7 @@ function createStaffApplication() {
         <div class="stop-list">
           ${stops.length
             ? stops.map(renderStopCard).join("")
-            : '<div class="empty-state"><h2>乗車予定はありません</h2><p>この便には利用者が登録されていません。</p></div>'}
+            : '<div class="empty-state"><h2>乗車予定はありません</h2><p>この便には患者が登録されていません。</p></div>'}
         </div>
       </article>`;
   }
@@ -689,8 +689,8 @@ function createStaffApplication() {
         <header class="stop-head">
           <span class="stop-order">${Number(stop.stopOrder || 0)}</span>
           <div>
-            <p class="rider-name">${escapeHtml(rider.fullName || "利用者不明")}</p>
-            <p class="rider-code">${escapeHtml(rider.riderCode || "利用者番号なし")}・${escapeHtml(SUPPORT_LABELS[rider.transportSupportLevel] || "支援区分未設定")}</p>
+            <p class="rider-name">${escapeHtml(rider.fullName || "患者不明")}</p>
+            <p class="rider-code">${escapeHtml(rider.riderCode || "患者番号なし")}・${escapeHtml(SUPPORT_LABELS[rider.transportSupportLevel] || "支援区分未設定")}</p>
           </div>
           ${statusBadge(stop.stopStatus, STOP_STATUS_LABELS)}
         </header>
@@ -774,7 +774,7 @@ function createStaffApplication() {
     document.getElementById("event-dialog-title").textContent =
       EVENT_LABELS[eventType] || "状態を更新";
     document.getElementById("event-dialog-description").textContent =
-      `${stop.rider?.fullName || "利用者"}さんの状態を「${
+      `${stop.rider?.fullName || "患者"}さんの状態を「${
         STOP_STATUS_LABELS[eventStatus(eventType)] || eventType
       }」へ更新します。内容を確認して記録してください。`;
     const notes = document.getElementById("event-notes");
@@ -831,7 +831,7 @@ function createStaffApplication() {
       eventDialog.close();
       await loadRuns();
       showToast(
-        `${pending.stop.rider?.fullName || "利用者"}さんを「${
+        `${pending.stop.rider?.fullName || "患者"}さんを「${
           STOP_STATUS_LABELS[eventStatus(pending.eventType)] || pending.eventType
         }」で記録しました。`
       );
@@ -924,7 +924,7 @@ function createStaffApplication() {
         <section class="empty-state">
           <span class="empty-state-icon">!</span>
           <h1>設定ファイルを確認してください</h1>
-          <p>API接続先または事業所コードが設定されていません。</p>
+          <p>API接続先または診療所コードが設定されていません。</p>
         </section>`;
       return;
     }

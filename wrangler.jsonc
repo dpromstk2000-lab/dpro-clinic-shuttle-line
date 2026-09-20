@@ -1,13 +1,15 @@
-// DPRO SHUTTLE-4 Cloudflare Builds
+// DPRO CLINIC_SHUTTLE / MASTER STANDARD V2.1
 {
   "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
-  "name": "dpro-welfare-shuttle-line-api",
+  "name": "dpro-clinic-shuttle-line-api",
   "main": "worker.js",
-  "compatibility_date": "2026-07-27",
+  "compatibility_date": "2026-09-20",
   "workers_dev": true,
   "keep_vars": true,
   "vars": {
-    "ALLOWED_ORIGINS": "https://dpromstk2000-lab.github.io"
+    "ALLOWED_ORIGINS": "https://dpromstk2000-lab.github.io",
+    "DPRO_SYSTEM_CODE": "CLINIC_SHUTTLE",
+    "SUPABASE_SCHEMA": "dpro_clinic_shuttle"
   },
   "observability": {
     "enabled": true

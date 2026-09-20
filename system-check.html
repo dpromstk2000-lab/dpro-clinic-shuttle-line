@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#0f766e">
   <meta name="robots" content="noindex,nofollow">
-  <title>DPRO 福祉施設送迎｜システム一括検査</title>
+  <title>DPRO 診療所送迎予約｜システム一括検査</title>
   <script src="config.js" defer></script>
   <style>
     :root {
@@ -337,7 +337,7 @@
       <a class="brand" href="./?demo=1" aria-label="利用開始ポータルへ戻る">
         <span class="brand-mark" aria-hidden="true">検</span>
         <span>
-          <strong>DPRO 福祉施設送迎</strong>
+          <strong>DPRO 診療所送迎予約</strong>
           <small>システム一括検査</small>
         </span>
       </a>
@@ -359,7 +359,7 @@
       <header class="panel-header">
         <div>
           <h2>管理者ログイン</h2>
-          <p>検査を実行するには、事業所コードと管理コードが必要です。</p>
+          <p>検査を実行するには、診療所コードと管理コードが必要です。</p>
         </div>
       </header>
       <div class="panel-body">
@@ -367,7 +367,7 @@
         <form id="login-form" novalidate>
           <div class="login-grid">
             <div class="field">
-              <label for="facility-code">事業所コード</label>
+              <label for="facility-code">診療所コード</label>
               <input id="facility-code" name="facilityCode" required maxlength="80" autocomplete="organization">
             </div>
             <div class="field">
@@ -422,7 +422,7 @@
   </main>
 
   <footer class="footer">
-    DPRO 福祉施設送迎 LINE ／ <span id="footer-version">SHUTTLE-10-R1-CHECK-20260729</span>
+    DPRO 診療所送迎予約 ／ <span id="footer-version">SHUTTLE-10-R1-CHECK-20260729</span>
   </footer>
 
   <script>
@@ -591,7 +591,7 @@
         ])],
         ["RLS", database.rlsDisabledTables?.length ? "fail" : "pass",
           `無効テーブル ${database.rlsDisabledTables?.length || 0}`],
-        ["事業所設定", check.facility?.status, detailList([
+        ["診療所設定", check.facility?.status, detailList([
           check.facility?.facilityCode,
           check.facility?.environment,
           check.facility?.businessStartTime && check.facility?.businessEndTime
@@ -609,7 +609,7 @@
           ? detailList([
               `スタッフ ${demo.staffCount ?? 0}名`,
               `車両 ${demo.vehicleCount ?? 0}台`,
-              `利用者 ${demo.riderCount ?? 0}名`,
+              `患者 ${demo.riderCount ?? 0}名`,
               `定期予定 ${demo.scheduleCount ?? 0}件`
             ])
           : "デモデータが未準備です"],
@@ -627,7 +627,7 @@
         ["レート制限", check.rateLimiting?.status,
           check.rateLimiting?.status === "pass" ? "RATE_LIMITER設定済み" : "本番前に推奨"],
         ["運用API", check.operationalApi?.status,
-          "利用者・家族・定期予定・便・乗降記録・変更依頼"]
+          "患者・家族・定期予定・便・乗降記録・変更依頼"]
       ];
     }
 
@@ -665,7 +665,7 @@
       checkSection.hidden = false;
       const facility = session?.facility || {};
       document.getElementById("account-box").innerHTML = `
-        <span><strong>事業所：</strong>${escapeHtml(facility.facilityName || facility.facilityCode || "DPRO 福祉施設送迎")}</span>
+        <span><strong>診療所：</strong>${escapeHtml(facility.facilityName || facility.facilityCode || "DPRO 診療所送迎予約")}</span>
         <span><strong>権限：</strong>${escapeHtml(session?.role === "admin" ? "管理者" : "配車担当")}</span>
         <span><strong>環境：</strong>${escapeHtml(facility.environment || config().environment || "―")}</span>`;
       prepareDemoButton.hidden = !(
@@ -731,7 +731,7 @@
       const facilityCode = String(values.get("facilityCode") || "").trim();
       const managementCode = String(values.get("managementCode") || "").trim();
       if (!facilityCode || !managementCode) {
-        showError(loginError, "事業所コードと管理コードを入力してください。");
+        showError(loginError, "診療所コードと管理コードを入力してください。");
         return;
       }
       setBusy(loginButton, true, "ログイン中…");

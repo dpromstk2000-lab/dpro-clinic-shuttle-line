@@ -1,5 +1,5 @@
 /*
- * DPRO 福祉施設送迎 LINE
+ * DPRO 診療所送迎予約
  * Cloudflare Worker API
  *
  * STEP: SHUTTLE-8
@@ -10,16 +10,18 @@
  * SESSION_SECRET、管理コードはCloudflare WorkersのSecretsとする。
  */
 
-const SERVICE_NAME = "DPRO Welfare Shuttle API";
-const WORKER_VERSION = "SHUTTLE-R2-WORKER-20260825";
-const DATABASE_VERSION = "SHUTTLE-R2-DB-20260825";
-const DEMO_PREPARE_VERSION = "SHUTTLE-7-DEMO-20260728";
+const SERVICE_NAME = "DPRO Clinic Shuttle API";
+const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R1-20260920";
+const DATABASE_VERSION = "CLINIC-SHUTTLE-V2.1-DB-R1-20260920";
+const SYSTEM_CODE = "CLINIC_SHUTTLE";
+const SUPABASE_SCHEMA = "dpro_clinic_shuttle";
+const DEMO_PREPARE_VERSION = "CLINIC-SHUTTLE-V2.1-DEMO-R1-20260920";
 const DEMO_STAFF_PIN = "5678";
 const DEMO_GUARDIAN_CODE = "DEMO-G01";
 const DEMO_GUARDIAN_PIN = "0301";
 const PIN_PBKDF2_ITERATIONS = 100000;
-const TOKEN_ISSUER = "dpro-welfare-shuttle";
-const TOKEN_AUDIENCE = "dpro-welfare-shuttle-api";
+const TOKEN_ISSUER = "dpro-clinic-shuttle";
+const TOKEN_AUDIENCE = "dpro-clinic-shuttle-api";
 const MAX_JSON_BYTES = 64 * 1024;
 const DEFAULT_TOKEN_TTL_SECONDS = 900;
 const MIN_TOKEN_TTL_SECONDS = 300;
@@ -84,7 +86,9 @@ export default {
           return successResponse(
             {
               service: SERVICE_NAME,
+              systemCode: SYSTEM_CODE,
               version: WORKER_VERSION,
+              databaseSchema: SUPABASE_SCHEMA,
               status: "healthy",
               timezone: "Asia/Tokyo",
               checkedAt: new Date().toISOString(),
@@ -98,7 +102,9 @@ export default {
           return successResponse(
             {
               service: SERVICE_NAME,
+              systemCode: SYSTEM_CODE,
               workerVersion: WORKER_VERSION,
+              databaseSchema: SUPABASE_SCHEMA,
               requiredDatabaseVersion: DATABASE_VERSION,
               apiStage: "SHUTTLE-R2",
             },
@@ -420,7 +426,7 @@ async function handleAdminLogin(
     throw new AppError(
       401,
       "INVALID_CREDENTIALS",
-      "事業所コードまたは管理コードが正しくありません。"
+      "診療所コードまたは管理コードが正しくありません。"
     );
   }
 
@@ -503,7 +509,7 @@ async function handleStaffLogin(
     throw new AppError(
       401,
       "INVALID_CREDENTIALS",
-      "事業所コード、ログインID、暗証番号を確認してください。"
+      "診療所コード、ログインID、暗証番号を確認してください。"
     );
   }
 
@@ -608,7 +614,7 @@ async function handleMemberLogin(
     throw new AppError(
       403,
       "MEMBER_LINK_NOT_APPROVED",
-      "このLINEアカウントは事業所での連携承認が完了していません。"
+      "このLINEアカウントは診療所での連携承認が完了していません。"
     );
   }
 
@@ -822,7 +828,7 @@ async function handleMemberLinkRequest(
     throw new AppError(
       403,
       "MEMBER_IDENTITY_NOT_MATCHED",
-      "家族番号と登録電話番号を確認できませんでした。事業所へお問い合わせください。"
+      "家族番号と登録電話番号を確認できませんでした。診療所へお問い合わせください。"
     );
   }
   if (
@@ -832,7 +838,7 @@ async function handleMemberLinkRequest(
     throw new AppError(
       409,
       "MEMBER_ALREADY_LINKED",
-      "別のLINEアカウントが連携済みです。事業所へ連携解除を依頼してください。"
+      "別のLINEアカウントが連携済みです。診療所へ連携解除を依頼してください。"
     );
   }
   if (
@@ -864,7 +870,7 @@ async function handleMemberLinkRequest(
     throw new AppError(
       409,
       "LINE_ACCOUNT_ALREADY_USED",
-      "このLINEアカウントは別の家族情報と連携済みです。事業所へお問い合わせください。"
+      "このLINEアカウントは別の家族情報と連携済みです。診療所へお問い合わせください。"
     );
   }
 
@@ -903,7 +909,7 @@ async function handleMemberLinkRequest(
   return successResponse(
     {
       linkStatus: "pending",
-      message: "LINE連携を申請しました。事業所の承認後に利用できます。",
+      message: "LINE連携を申請しました。診療所の承認後に利用できます。",
     },
     202,
     corsOrigin,
@@ -948,7 +954,7 @@ async function handleMemberHome(
     throw new AppError(
       403,
       "MEMBER_LINK_NOT_APPROVED",
-      "LINE連携の承認状態を確認できません。事業所へお問い合わせください。"
+      "LINE連携の承認状態を確認できません。診療所へお問い合わせください。"
     );
   }
 
@@ -1468,7 +1474,7 @@ async function handleDemoPrepare(
     throw new AppError(
       403,
       "DEMO_PREPARE_FORBIDDEN",
-      "本番事業所ではデモデータを準備できません。"
+      "本番診療所ではデモデータを準備できません。"
     );
   }
 
@@ -1567,7 +1573,7 @@ async function ensureDemoMember(env, facilityId) {
     throw new AppError(
       502,
       "DEMO_MEMBER_RIDER_MISSING",
-      "デモ家族に紐づける利用者を確認できませんでした。"
+      "デモ家族に紐づける患者を確認できませんでした。"
     );
   }
 
@@ -1691,7 +1697,7 @@ async function ensureDemoMember(env, facilityId) {
     throw new AppError(
       502,
       "DEMO_MEMBER_LINK_MISSING",
-      "デモ家族と利用者を紐づけできませんでした。"
+      "デモ家族と患者を紐づけできませんでした。"
     );
   }
   return { guardian, rider, link };
@@ -2412,8 +2418,8 @@ async function handleRiderCreate(
   ]);
   await enforceRateLimit(request, env, "rider-create", session);
   const body = await readJsonObject(request);
-  const riderCode = requireCode(body.riderCode, "利用者番号");
-  const fullName = requireString(body.fullName, "利用者氏名", 1, 100);
+  const riderCode = requireCode(body.riderCode, "患者番号");
+  const fullName = requireString(body.fullName, "患者氏名", 1, 100);
   const fullNameKana = optionalString(
     body.fullNameKana,
     "ふりがな",
@@ -2534,7 +2540,7 @@ async function handleRiderUpdate(
   if (body.fullName !== undefined) {
     changes.full_name = requireString(
       body.fullName,
-      "利用者氏名",
+      "患者氏名",
       1,
       100
     );
@@ -2653,7 +2659,7 @@ async function handleGuardianList(
   const query = optionalSearchQuery(url.searchParams.get("query"));
   const riderId = optionalUuid(
     url.searchParams.get("riderId"),
-    "利用者ID"
+    "患者ID"
   );
   let guardianIds = null;
 
@@ -2920,7 +2926,7 @@ async function handleGuardianRiderLinkList(
   );
   const riderId = optionalUuid(
     url.searchParams.get("riderId"),
-    "利用者ID"
+    "患者ID"
   );
   const params = new URLSearchParams();
   params.set(
@@ -2964,7 +2970,7 @@ async function handleGuardianRiderLinkCreate(
   await enforceRateLimit(request, env, "guardian-link-create", session);
   const body = await readJsonObject(request);
   const guardianId = requireUuid(body.guardianId, "家族ID");
-  const riderId = requireUuid(body.riderId, "利用者ID");
+  const riderId = requireUuid(body.riderId, "患者ID");
   const [guardianRows] = await Promise.all([
     fetchRowsByIds(
       env,
@@ -3057,7 +3063,7 @@ async function handleLocationList(
   const url = new URL(request.url);
   const riderId = optionalUuid(
     url.searchParams.get("riderId"),
-    "利用者ID"
+    "患者ID"
   );
   const params = new URLSearchParams();
   params.set(
@@ -3104,19 +3110,19 @@ async function handleLocationCreate(
     "場所区分",
     ["home", "school", "facility", "other"]
   );
-  const riderId = optionalUuid(body.riderId, "利用者ID");
+  const riderId = optionalUuid(body.riderId, "患者ID");
   if (locationType === "facility" && riderId) {
     throw new AppError(
       400,
       "FACILITY_LOCATION_OWNER",
-      "施設共通の場所には利用者を指定できません。"
+      "施設共通の場所には患者を指定できません。"
     );
   }
   if (locationType !== "facility" && !riderId) {
     throw new AppError(
       400,
       "RIDER_REQUIRED",
-      "利用者の乗降場所には利用者を指定してください。"
+      "患者の乗降場所には患者を指定してください。"
     );
   }
   const locationName = requireString(
@@ -3330,7 +3336,7 @@ async function handleRegularScheduleList(
   const url = new URL(request.url);
   const riderId = optionalUuid(
     url.searchParams.get("riderId"),
-    "利用者ID"
+    "患者ID"
   );
   const dayOfWeekValue = url.searchParams.get("dayOfWeek");
   const dayOfWeek =
@@ -3381,7 +3387,7 @@ async function handleRegularScheduleCreate(
   const body = await readJsonObject(request);
   const payload = {
     facility_id: session.facilityId,
-    rider_id: requireUuid(body.riderId, "利用者ID"),
+    rider_id: requireUuid(body.riderId, "患者ID"),
     day_of_week: requireInteger(body.dayOfWeek, "曜日", 0, 6),
     service_type: requireEnum(
       body.serviceType,
@@ -4122,7 +4128,7 @@ async function handleChangeRequestCreate(
   ]);
   await enforceRateLimit(request, env, "change-request-create", session);
   const body = await readJsonObject(request);
-  const riderId = requireUuid(body.riderId, "利用者ID");
+  const riderId = requireUuid(body.riderId, "患者ID");
   const serviceDate = requireDate(body.serviceDate, "送迎日");
   assertNotPastJstDate(
     serviceDate,
@@ -4628,7 +4634,7 @@ async function findRiderById(env, facilityId, riderId) {
     throw new AppError(
       404,
       "RIDER_NOT_FOUND",
-      "対象の利用者が見つかりません。"
+      "対象の患者が見つかりません。"
     );
   }
   return rider;
@@ -4661,7 +4667,7 @@ async function assertRiderNotDuplicated(
     throw new AppError(
       409,
       "RIDER_DUPLICATE",
-      "同じ氏名と電話番号の利用者がすでに登録されています。"
+      "同じ氏名と電話番号の患者がすでに登録されています。"
     );
   }
 }
@@ -4716,7 +4722,7 @@ async function assertGuardianCanChangeRider(
     throw new AppError(
       403,
       "RIDER_ACCESS_DENIED",
-      "この利用者の送迎変更を依頼する権限がありません。"
+      "この患者の送迎変更を依頼する権限がありません。"
     );
   }
 }
@@ -4745,7 +4751,7 @@ async function assertRegularScheduleRules(
     throw new AppError(
       503,
       "FACILITY_SETTINGS_MISSING",
-      "事業所の送迎時間設定が見つかりません。"
+      "診療所の送迎時間設定が見つかりません。"
     );
   }
   const pickupMinutes = timeToMinutes(pickupTime);
@@ -4761,7 +4767,7 @@ async function assertRegularScheduleRules(
     throw new AppError(
       400,
       "OUTSIDE_BUSINESS_HOURS",
-      "送迎予定時刻が事業所の運行時間外です。"
+      "送迎予定時刻が診療所の運行時間外です。"
     );
   }
   if (
@@ -5148,7 +5154,7 @@ function publicMemberSchedule(row, rider, locationById) {
   return {
     id: row.id,
     riderId: row.rider_id,
-    riderName: rider?.full_name || "利用者",
+    riderName: rider?.full_name || "患者",
     serviceType: row.service_type,
     scheduledPickupTime: row.scheduled_pickup_time,
     scheduledDropoffTime: row.scheduled_dropoff_time,
@@ -5163,7 +5169,7 @@ function publicMemberStop(row, rider, run, locationById) {
   return {
     id: row.id,
     riderId: row.rider_id,
-    riderName: rider?.full_name || "利用者",
+    riderName: rider?.full_name || "患者",
     runCode: run?.run_code || null,
     serviceType: run?.service_type || null,
     runStatus: run?.run_status || null,
@@ -5334,7 +5340,7 @@ async function findFacilityByCode(env, facilityCode) {
     throw new AppError(
       401,
       "INVALID_CREDENTIALS",
-      "事業所コードまたは認証情報が正しくありません。"
+      "診療所コードまたは認証情報が正しくありません。"
     );
   }
   return facility;
@@ -5359,7 +5365,7 @@ async function findFacilityById(env, facilityId) {
     throw new AppError(
       403,
       "FACILITY_NOT_AVAILABLE",
-      "この事業所は現在利用できません。"
+      "この診療所は現在利用できません。"
     );
   }
   return facility;
@@ -5403,6 +5409,26 @@ function assertFacilityEnvironment(facility, env) {
 
 function assertBaseConfiguration(env, options = {}) {
   const { requireSession = false } = options;
+  if (
+    env.DPRO_SYSTEM_CODE &&
+    String(env.DPRO_SYSTEM_CODE) !== SYSTEM_CODE
+  ) {
+    throw new AppError(
+      503,
+      "DPRO_SYSTEM_CODE_MISMATCH",
+      "システム識別設定が一致していません。管理者へ連絡してください。"
+    );
+  }
+  if (
+    env.SUPABASE_SCHEMA &&
+    String(env.SUPABASE_SCHEMA) !== SUPABASE_SCHEMA
+  ) {
+    throw new AppError(
+      503,
+      "DPRO_SCHEMA_MISMATCH",
+      "データベース分離設定が一致していません。管理者へ連絡してください。"
+    );
+  }
   let parsedUrl;
 
   try {
@@ -5470,6 +5496,12 @@ async function supabaseRequest(env, relativePath, options = {}) {
     apikey: serverKey,
     accept: "application/json",
   });
+
+  // DPRO system isolation: this product uses a dedicated PostgREST schema.
+  headers.set("accept-profile", SUPABASE_SCHEMA);
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(String(method).toUpperCase())) {
+    headers.set("content-profile", SUPABASE_SCHEMA);
+  }
 
   /*
    * 新しい sb_secret_ キーは apikey ヘッダーだけで送る。
@@ -5576,7 +5608,7 @@ function mapSupabaseError(status, payload) {
       409,
       "DUPLICATE_CONFLICT",
       databaseCode === "23P01"
-        ? "同じ時間帯に車両・スタッフ・利用者の予定が重複しています。別の時間または担当を選択してください。"
+        ? "同じ時間帯に車両・スタッフ・患者の予定が重複しています。別の時間または担当を選択してください。"
         : "同じ内容がすでに登録されています。画面を更新してご確認ください。",
       internalMessage
     );
@@ -5601,7 +5633,7 @@ function mapSupabaseError(status, payload) {
     return new AppError(
       404,
       "RELATED_RECORD_NOT_FOUND",
-      "指定した利用者・場所・車両・スタッフが見つかりません。画面を更新してください。",
+      "指定した患者・場所・車両・スタッフが見つかりません。画面を更新してください。",
       internalMessage
     );
   }
@@ -6289,12 +6321,12 @@ async function readJsonObject(request, options = {}) {
 }
 
 function requireFacilityCode(value) {
-  const code = requireString(value, "事業所コード", 3, 64);
+  const code = requireString(value, "診療所コード", 3, 64);
   if (!/^[a-z0-9][a-z0-9_-]{2,63}$/.test(code)) {
     throw new AppError(
       400,
       "INVALID_FACILITY_CODE",
-      "事業所コードの形式が正しくありません。"
+      "診療所コードの形式が正しくありません。"
     );
   }
   return code;

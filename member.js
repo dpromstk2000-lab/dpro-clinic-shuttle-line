@@ -313,7 +313,7 @@ function setBusy(button, busy, text = "処理中…") {
 
 function shell(content, session = null) {
   const facilityName =
-    session?.facility?.facilityName || "DPRO 福祉施設送迎";
+    session?.facility?.facilityName || "DPRO 診療所送迎予約";
   return `
     <div class="member-shell">
       <header class="member-header">
@@ -329,7 +329,7 @@ function shell(content, session = null) {
         </div>
       </header>
       <main class="member-main">${content}</main>
-      <footer class="member-footer">DPRO 福祉施設送迎 LINE　${escapeHtml(runtimeConfig.version || "SHUTTLE-7")}</footer>
+      <footer class="member-footer">DPRO 診療所送迎予約　${escapeHtml(runtimeConfig.version || "SHUTTLE-7")}</footer>
     </div>`;
 }
 
@@ -449,7 +449,7 @@ function renderLineNotConfigured(app) {
     <section class="member-hero">
       <p class="member-eyebrow">ご家族用</p>
       <h1>LINE設定準備中</h1>
-      <p>デモ確認後に、事業所専用のLIFF設定を行います。</p>
+      <p>デモ確認後に、診療所専用のLIFF設定を行います。</p>
     </section>
     <div class="member-notice is-warning">
       本番用LIFF IDがまだ設定されていません。管理者へお問い合わせください。
@@ -465,14 +465,14 @@ function renderLinkRequest(app, idToken) {
     <section class="member-hero">
       <p class="member-eyebrow">初回のみ</p>
       <h1>LINE連携を申請</h1>
-      <p>家族番号と事業所へ登録済みの電話番号を照合します。</p>
+      <p>家族番号と診療所へ登録済みの電話番号を照合します。</p>
     </section>
     <div class="member-notice">
-      申請後、事業所が承認すると送迎予定を閲覧できます。別の方の情報と誤って連携しないため、承認前は予定を表示しません。
+      申請後、診療所が承認すると送迎予定を閲覧できます。別の方の情報と誤って連携しないため、承認前は予定を表示しません。
     </div>
     <section class="member-card">
       <header class="member-card-header">
-        <div><h2>本人確認</h2><p>登録内容が分からない場合は事業所へご連絡ください。</p></div>
+        <div><h2>本人確認</h2><p>登録内容が分からない場合は診療所へご連絡ください。</p></div>
       </header>
       <div class="member-card-body">
         <form id="member-link-request" novalidate>
@@ -522,10 +522,10 @@ function renderLinkRequest(app, idToken) {
         app.innerHTML = shell(`
           <section class="member-hero">
             <p class="member-eyebrow">申請完了</p>
-            <h1>事業所の承認待ちです</h1>
+            <h1>診療所の承認待ちです</h1>
             <p>${escapeHtml(result.message || "承認後にLINEから開き直してください。")}</p>
           </section>
-          <div class="member-notice">承認されるまで送迎予定や利用者情報は表示されません。</div>
+          <div class="member-notice">承認されるまで送迎予定や患者情報は表示されません。</div>
         `);
       } catch (error) {
         toast(error.message, true);
@@ -591,13 +591,13 @@ function renderHomeData(app, session, data) {
       </div>
     </section>
     <div class="member-summary-grid" aria-label="送迎概要">
-      <div class="member-summary"><span>対象利用者</span><strong>${riders.length}名</strong></div>
+      <div class="member-summary"><span>対象患者</span><strong>${riders.length}名</strong></div>
       <div class="member-summary"><span>当日の送迎</span><strong>${Math.max(stops.length, schedules.length)}件</strong></div>
       <div class="member-summary"><span>変更依頼</span><strong>${changes.length}件</strong></div>
     </div>
     <section class="member-card">
       <header class="member-card-header">
-        <div><h2>送迎予定・運行状況</h2><p>事業所で当日の便が生成されると、現在の状況が表示されます。</p></div>
+        <div><h2>送迎予定・運行状況</h2><p>診療所で当日の便が生成されると、現在の状況が表示されます。</p></div>
       </header>
       <div class="member-card-body">
         ${riders.length ? `
@@ -613,7 +613,7 @@ function renderHomeData(app, session, data) {
               }
               return `<article class="member-record"><div class="member-record-top"><h3>${escapeHtml(rider.fullName)}</h3><span class="member-status">予定なし</span></div><p class="member-record-meta">選択した日の定期送迎予定はありません。</p></article>`;
             }).join("")}
-          </div>` : '<div class="member-empty"><strong>閲覧できる利用者がいません</strong><p>利用者との紐づけを事業所へご確認ください。</p></div>'}
+          </div>` : '<div class="member-empty"><strong>閲覧できる患者がいません</strong><p>患者との紐づけを診療所へご確認ください。</p></div>'}
       </div>
     </section>
     ${riders.some((rider) => rider.canRequestChange) ? renderChangeForm(riders, data.serviceDate) : ""}
@@ -631,7 +631,7 @@ function renderHomeData(app, session, data) {
                   <span class="member-status ${statusTone(request.requestStatus)}">${escapeHtml(requestStatusLabels[request.requestStatus] || request.requestStatus)}</span>
                 </div>
                 <p>${escapeHtml(changeSummary(request.requestedChanges))}</p>
-                ${request.reviewNotes ? `<p class="member-record-meta">事業所から：${escapeHtml(request.reviewNotes)}</p>` : ""}
+                ${request.reviewNotes ? `<p class="member-record-meta">診療所から：${escapeHtml(request.reviewNotes)}</p>` : ""}
               </article>`).join("")}
           </div>` : '<div class="member-empty"><strong>変更依頼はありません</strong><p>欠席・時間変更などがある場合は、上のフォームから連絡できます。</p></div>'}
       </div>
@@ -672,20 +672,31 @@ function renderScheduleRecord(schedule) {
     </article>`;
 }
 
+function renderThirtyMinuteTimeOptions() {
+  const options = ['<option value="">選択してください</option>'];
+  for (let hour = 0; hour < 24; hour += 1) {
+    for (const minute of [0, 30]) {
+      const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      options.push(`<option value="${value}">${value}</option>`);
+    }
+  }
+  return options.join("");
+}
+
 function renderChangeForm(riders, serviceDate) {
   const allowed = riders.filter((rider) => rider.canRequestChange);
   const past = isPastJstDate(serviceDate);
   return `
     <section class="member-card">
       <header class="member-card-header">
-        <div><h2>欠席・変更を連絡</h2><p>送信後は事業所の確認待ちになります。</p></div>
+        <div><h2>欠席・変更を連絡</h2><p>送信後は診療所の確認待ちになります。</p></div>
       </header>
       <div class="member-card-body">
         ${past ? '<div class="member-notice is-warning">過去日の変更依頼は送信できません。</div>' : ""}
         <form id="member-change-form" novalidate>
           <div class="member-grid">
             <div class="member-field">
-              <label for="change-rider">利用者<span class="member-required">必須</span></label>
+              <label for="change-rider">患者<span class="member-required">必須</span></label>
               <select id="change-rider" name="riderId" required ${past ? "disabled" : ""}>
                 ${allowed.map((rider) => `<option value="${escapeHtml(rider.id)}">${escapeHtml(rider.fullName)}</option>`).join("")}
               </select>
@@ -710,16 +721,16 @@ function renderChangeForm(riders, serviceDate) {
             </div>
             <div class="member-field" data-change-field="pickup-time" hidden>
               <label for="change-pickup-time">迎え希望時刻</label>
-              <input id="change-pickup-time" name="requestedPickupTime" type="time" step="300" ${past ? "disabled" : ""}>
+              <select id="change-pickup-time" name="requestedPickupTime" ${past ? "disabled" : ""}>${renderThirtyMinuteTimeOptions()}</select>
             </div>
             <div class="member-field" data-change-field="dropoff-time" hidden>
               <label for="change-dropoff-time">送り希望時刻</label>
-              <input id="change-dropoff-time" name="requestedDropoffTime" type="time" step="300" ${past ? "disabled" : ""}>
+              <select id="change-dropoff-time" name="requestedDropoffTime" ${past ? "disabled" : ""}>${renderThirtyMinuteTimeOptions()}</select>
             </div>
             <div class="member-field is-full">
               <label for="change-note">補足・その他の内容</label>
-              <textarea id="change-note" name="note" maxlength="1000" placeholder="事業所へ伝える内容を入力してください" ${past ? "disabled" : ""}></textarea>
-              <p class="member-hint">緊急時はこの画面だけに頼らず、事業所へ電話してください。</p>
+              <textarea id="change-note" name="note" maxlength="1000" placeholder="診療所へ伝える内容を入力してください" ${past ? "disabled" : ""}></textarea>
+              <p class="member-hint">緊急時はこの画面だけに頼らず、診療所へ電話してください。</p>
             </div>
           </div>
           <div class="member-actions">
@@ -786,7 +797,7 @@ function bindHomeActions(app, session, serviceDate) {
           requestedChanges
         }
       });
-      toast("変更依頼を送信しました。事業所の確認をお待ちください。");
+      toast("変更依頼を送信しました。診療所の確認をお待ちください。");
       await renderHome(app, session, serviceDate);
     } catch (error) {
       toast(error.message, true);

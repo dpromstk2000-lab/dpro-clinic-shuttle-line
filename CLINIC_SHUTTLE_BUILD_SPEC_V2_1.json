@@ -1,0 +1,156 @@
+{
+  "schema_version": "DPRO_CLINIC_SHUTTLE_BUILD_SPEC_V2_1_R1",
+  "generated_at": "2026-09-20T11:25:55+09:00",
+  "product_name": "DPRO 診療所送迎予約",
+  "system_code": "CLINIC_SHUTTLE",
+  "dev_code": "PD-20260919140524-2709EE",
+  "master_standard": {
+    "version": "DPRO MASTER STANDARD V2.1",
+    "sha256": "c5a441b43de71e5541568400c20d7c38a5932a1e11e0af40e3ab97fad0932b02"
+  },
+  "reference": {
+    "system_code": "WELFARE_SHUTTLE",
+    "repository": "dpromstk2000-lab/dpro-welfare-shuttle-line",
+    "imported_source_sha": "e56ffc7059e4be725874b31893fd8b41e1dbff9d",
+    "reuse_policy": "reuse_proven_components_without_unnecessary_reimplementation"
+  },
+  "identity": {
+    "repository": "dpromstk2000-lab/dpro-clinic-shuttle-line",
+    "pages_root": "https://dpromstk2000-lab.github.io/dpro-clinic-shuttle-line/",
+    "worker_name": "dpro-clinic-shuttle-line-api",
+    "worker_url": "https://dpro-clinic-shuttle-line-api.dpromstk2000.workers.dev",
+    "supabase_schema": "dpro_clinic_shuttle",
+    "demo_facility_code": "dpro_clinic_shuttle_demo",
+    "frontend_version": "CLINIC-SHUTTLE-V2.1-R1-20260920",
+    "worker_version": "CLINIC-SHUTTLE-V2.1-WORKER-R1-20260920",
+    "database_version": "CLINIC-SHUTTLE-V2.1-DB-R1-20260920"
+  },
+  "product_boundary": {
+    "included": [
+      "WEB/LINE送迎予約",
+      "電話受付による代理登録",
+      "患者本人・家族台帳",
+      "お迎え先登録",
+      "送迎日・希望時間",
+      "片道・往復・帰りのみ",
+      "予約変更・取消",
+      "予約一覧・運行スケジュール",
+      "車両・ドライバー割当",
+      "当日運行管理",
+      "診療終了後の帰り便管理",
+      "予約確定・変更通知",
+      "権限別画面",
+      "CONTACT HUB"
+    ],
+    "excluded": [
+      "電子カルテ本体",
+      "診療記録",
+      "病名",
+      "検査結果",
+      "処方内容",
+      "医療費請求",
+      "レセプト",
+      "医療判断"
+    ]
+  },
+  "reservation_design": {
+    "time_booking": true,
+    "customer_slot_minutes": 30,
+    "arbitrary_one_minute_customer_input": false,
+    "past_datetime_booking": false,
+    "trip_types": [
+      "outbound_to_clinic",
+      "round_trip",
+      "return_only"
+    ],
+    "change_cancel_semantics": "request_then_staff_confirmation_by_default",
+    "final_summary_before_submit": true,
+    "duplicate_guard": true,
+    "capacity_guard": true,
+    "resource_conflict_guard": [
+      "vehicle",
+      "driver"
+    ],
+    "operational_actual_timestamps": "server_recorded_exact_timestamp"
+  },
+  "appointment_boundary": {
+    "allowed": [
+      "受診予定日",
+      "受診予定時刻",
+      "外部予約参照IDまたは受付メモ（診療内容を含まない）"
+    ],
+    "forbidden": [
+      "病名",
+      "検査結果",
+      "処方",
+      "詳細診療内容"
+    ],
+    "driver_visibility": "transport_only"
+  },
+  "staff_vehicle_lifecycle": {
+    "create_edit": true,
+    "activate_suspend": true,
+    "soft_delete": true,
+    "preserve_history": true,
+    "new_assignment_active_only": true,
+    "in_use_suspend_guard": true
+  },
+  "patient_search": {
+    "empty_search_lists_all": false,
+    "explicit_all_action_with_limit": true,
+    "default_all_limit": 100,
+    "search_progress_and_count": true
+  },
+  "owner_settings": {
+    "enabled": true,
+    "desktop_layout": "left_index_right_panel",
+    "boolean_controls": "switch",
+    "save_state": [
+      "unsaved",
+      "saving",
+      "saved",
+      "failed"
+    ],
+    "dpro_fixed_fields": [
+      "system_code",
+      "schema",
+      "security_boundaries",
+      "audit_rules"
+    ]
+  },
+  "channels": {
+    "base_model": "Website + Official LINE + DPRO",
+    "supported_compositions": [
+      "Website + Official LINE + DPRO",
+      "Website + DPRO",
+      "Official LINE + DPRO"
+    ],
+    "contact_sources": [
+      "web",
+      "line",
+      "instagram",
+      "phone_proxy"
+    ],
+    "channel_failure_isolation": true
+  },
+  "data_safety": {
+    "medical_data_minimized": true,
+    "status_history": true,
+    "audit_log": true,
+    "internal_note_separated_from_customer_copy": true,
+    "secrets_in_browser": false,
+    "demo_real_data_forbidden": true
+  },
+  "delivery_sequence": [
+    "SYSTEM_CODE separation",
+    "dedicated DB schema",
+    "Worker adaptation",
+    "Owner/iPad/Staff/Patient-Family UI",
+    "WEB/LINE/CONTACT integration",
+    "System Check",
+    "cross-role QA",
+    "FACTORY FINAL 4/4",
+    "FINAL LOCK and return ZIP"
+  ],
+  "current_stage": "SYSTEM_CODE_SEPARATION_COMPLETE_PENDING_GITHUB_RUN"
+}

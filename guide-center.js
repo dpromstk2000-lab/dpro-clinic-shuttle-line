@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const ROLE_KEY = "dpro_welfare_shuttle_tutorial_role_v1";
+  const ROLE_KEY = "dpro_clinic_shuttle_tutorial_role_v1";
   const CATEGORY_ROLES = Object.freeze({
     "GC-START": ["all"],
     "GC-FAMILY": ["family"],

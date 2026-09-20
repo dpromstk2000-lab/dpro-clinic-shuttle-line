@@ -1,0 +1,31 @@
+DPRO 診療所送迎予約 / PHASE 1 STATUS
+
+MASTER: DPRO MASTER STANDARD V2.1
+MASTER SHA256: c5a441b43de71e5541568400c20d7c38a5932a1e11e0af40e3ab97fad0932b02
+SYSTEM CODE: CLINIC_SHUTTLE
+REFERENCE SOURCE: WELFARE_SHUTTLE @ e56ffc7059e4be725874b31893fd8b41e1dbff9d
+
+PHASE 1:
+- Imported repository lineage verified
+- Runtime identity separated from WELFARE_SHUTTLE
+- Worker name/API URL separated
+- Demo facility/session storage separated
+- Supabase custom schema fixed to dpro_clinic_shuttle
+- Legacy Welfare workflows moved out of .github/workflows
+- Legacy Welfare R2 migration moved to reference/migrations
+- UI terminology adapted to clinic/patient context
+- Inherited 5-minute time step removed; customer change-time selects use 30-minute options
+- MASTER V2.1 build specification generated
+
+NOT YET COMPLETE:
+- Dedicated CLINIC_SHUTTLE DB schema/tables/RPC migration
+- New WEB/LINE/phone reservation domain
+- Staff/vehicle soft-delete + in-use guards
+- Patient search empty-query guard + explicit limited all-list
+- Owner settings V2.1 surface
+- CONTACT HUB
+- System Check V2.1 expansion
+- Cross-role QA / FINAL 4/4
+
+NEXT:
+Run PHASE 2 DB + reservation engine implementation.

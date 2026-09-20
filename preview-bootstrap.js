@@ -13,8 +13,8 @@
   const config = window.DPRO_SHUTTLE_CONFIG || {};
   const page = window.location.pathname.split("/").pop() || "index.html";
   const facility = {
-    facilityCode: config.facilityCode || "dpro_welfare_shuttle_demo",
-    facilityName: "DPRO 福祉施設送迎 デモ事業所",
+    facilityCode: config.facilityCode || "dpro_clinic_shuttle_demo",
+    facilityName: "DPRO 診療所送迎予約 デモ診療所",
     environment: "demo",
     timezone: "Asia/Tokyo"
   };
@@ -118,7 +118,7 @@
         {
           id: "preview-rider-1",
           riderCode: "DEMO-R01",
-          fullName: "デモ 利用者A",
+          fullName: "デモ 患者A",
           canViewSchedule: true,
           canRequestChange: true
         }
@@ -128,7 +128,7 @@
         {
           id: "preview-stop-1",
           riderId: "preview-rider-1",
-          riderName: "デモ 利用者A",
+          riderName: "デモ 患者A",
           serviceType: "pickup",
           stopStatus: "en_route",
           plannedPickupAt: `${today}T08:20:00+09:00`,
@@ -140,7 +140,7 @@
         {
           id: "preview-stop-2",
           riderId: "preview-rider-1",
-          riderName: "デモ 利用者A",
+          riderName: "デモ 患者A",
           serviceType: "dropoff",
           stopStatus: "planned",
           plannedPickupAt: `${today}T16:10:00+09:00`,

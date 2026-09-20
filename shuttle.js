@@ -44,16 +44,16 @@
       description: "本日の送迎便・変更依頼・注意事項をまとめて確認します"
     },
     riders: {
-      label: "利用者",
-      shortLabel: "利用者",
+      label: "患者",
+      shortLabel: "患者",
       icon: "♙",
-      description: "送迎利用者、移動支援区分、緊急連絡先を管理します"
+      description: "送迎患者、移動支援区分、緊急連絡先を管理します"
     },
     families: {
       label: "家族・LINE連携",
       shortLabel: "家族",
       icon: "♧",
-      description: "家族情報、利用者との関係、LINE連携の承認状態を管理します"
+      description: "家族情報、患者との関係、LINE連携の承認状態を管理します"
     },
     schedules: {
       label: "定期予定",
@@ -732,7 +732,7 @@
           guardianCode: "DEMO-G01",
           pin: "0301",
           fullName: "デモ 家族A",
-          riderName: "デモ 利用者A"
+          riderName: "デモ 患者A"
         }
       });
     }
@@ -790,17 +790,17 @@
     app.removeAttribute("aria-busy");
     app.innerHTML = `
       <main class="login-page">
-        <section class="login-brand" aria-label="DPRO福祉施設送迎">
+        <section class="login-brand" aria-label="DPRO診療所送迎予約">
           <div class="brand-lockup">
             <span class="brand-mark" aria-hidden="true">▰</span>
             <div>
               <p class="brand-name"><strong>DPRO</strong></p>
-              <p class="brand-subtitle">福祉施設送迎 LINE</p>
+              <p class="brand-subtitle">診療所送迎予約 LINE</p>
             </div>
           </div>
           <div class="login-message">
             <h2>今日の送迎を、<br>ひとつの画面で確実に。</h2>
-            <p>配車、利用者、車両、変更依頼をまとめて確認。送迎業務の見落としと二重対応を防ぎます。</p>
+            <p>配車、患者、車両、変更依頼をまとめて確認。送迎業務の見落としと二重対応を防ぎます。</p>
           </div>
           <ul class="login-points">
             <li>当日運行を一覧化</li>
@@ -823,7 +823,7 @@
               <form id="login-form" novalidate>
                 <input type="hidden" name="authMode" value="admin">
                 <div class="field">
-                  <label for="facility-code">事業所コード<span class="required-mark">必須</span></label>
+                  <label for="facility-code">診療所コード<span class="required-mark">必須</span></label>
                   <input id="facility-code" name="facilityCode" type="text" autocomplete="organization" required maxlength="80" value="${escapeHtml(config.facilityCode || "")}">
                 </div>
                 <div id="admin-auth-fields">
@@ -949,7 +949,7 @@
     const facilityName =
       state.facility?.facilityName ||
       state.facility?.facility_name ||
-      "DPRO 福祉施設送迎";
+      "DPRO 診療所送迎予約";
     app.className = "";
     app.removeAttribute("aria-busy");
     app.innerHTML = `
@@ -960,7 +960,7 @@
             <span class="brand-mark" aria-hidden="true">▰</span>
             <div>
               <p class="sidebar-brand-name">DPRO</p>
-              <span class="sidebar-brand-sub">福祉施設送迎 LINE</span>
+              <span class="sidebar-brand-sub">診療所送迎予約 LINE</span>
             </div>
           </div>
           <nav class="sidebar-nav">
@@ -1368,26 +1368,26 @@
     content.innerHTML = `
       <section class="content-header">
         <div>
-          <h2 class="content-title">利用者管理</h2>
-          <p class="content-description">氏名・電話番号・利用者番号から検索できます。</p>
+          <h2 class="content-title">患者管理</h2>
+          <p class="content-description">氏名・電話番号・患者番号から検索できます。</p>
         </div>
         <div class="action-row">
-          <button type="button" class="button" data-action="open-rider-form"><span aria-hidden="true">＋</span>利用者を登録</button>
+          <button type="button" class="button" data-action="open-rider-form"><span aria-hidden="true">＋</span>患者を登録</button>
         </div>
       </section>
       <section class="panel">
         <header class="panel-header">
           <div>
-            <h2 class="panel-title">登録利用者</h2>
+            <h2 class="panel-title">登録患者</h2>
             <p class="panel-subtitle">電話番号はハイフン・空白・全角・+81形式でも同一判定します。</p>
           </div>
           <div class="search-group">
-            <input class="control" id="rider-search" type="search" maxlength="100" placeholder="氏名・電話番号・利用者番号" aria-label="利用者検索">
+            <input class="control" id="rider-search" type="search" maxlength="100" placeholder="氏名・電話番号・患者番号" aria-label="患者検索">
             <button type="button" class="button" data-action="search-riders">検索</button>
             <button type="button" class="button button-secondary" data-action="clear-rider-search">クリア</button>
           </div>
         </header>
-        ${riders.length ? renderRidersTable(riders) : emptyState("♙", "利用者が登録されていません", "最初に送迎を利用する方の基本情報を登録してください。医療・健康情報は必要最小限だけ入力します。", '<button type="button" class="button" data-action="open-rider-form">利用者を登録</button>')}
+        ${riders.length ? renderRidersTable(riders) : emptyState("♙", "患者が登録されていません", "最初に送迎を利用する方の基本情報を登録してください。医療・健康情報は必要最小限だけ入力します。", '<button type="button" class="button" data-action="open-rider-form">患者を登録</button>')}
       </section>`;
   }
 
@@ -1397,7 +1397,7 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th scope="col">利用者</th>
+              <th scope="col">患者</th>
               <th scope="col">電話番号</th>
               <th scope="col">移動支援</th>
               <th scope="col">車いす</th>
@@ -1409,7 +1409,7 @@
           <tbody>
             ${riders.map((rider) => `
               <tr>
-                <td class="cell-primary" data-label="利用者">
+                <td class="cell-primary" data-label="患者">
                   <span class="primary-cell">${escapeHtml(rider.fullName)}</span>
                   <span class="secondary-cell">${escapeHtml(rider.riderCode)}${rider.fullNameKana ? `・${escapeHtml(rider.fullNameKana)}` : ""}</span>
                 </td>
@@ -1449,7 +1449,7 @@
       <section class="content-header">
         <div>
           <h2 class="content-title">家族・LINE連携</h2>
-          <p class="content-description">家族と利用者の閲覧範囲を分け、LINE連携申請を事業所側で承認します。</p>
+          <p class="content-description">家族と患者の閲覧範囲を分け、LINE連携申請を診療所側で承認します。</p>
         </div>
         <div class="action-row">
           <a class="button button-secondary" href="member.html?demo=1" target="_blank" rel="noopener">家族デモ画面</a>
@@ -1464,7 +1464,7 @@
       ${!state.data.riders.length ? `
         <div class="info-strip is-warning">
           <span aria-hidden="true">△</span>
-          <div><strong>最初に利用者を登録してください。</strong><br>家族情報は、閲覧対象となる利用者と必ず紐づけて登録します。</div>
+          <div><strong>最初に患者を登録してください。</strong><br>家族情報は、閲覧対象となる患者と必ず紐づけて登録します。</div>
         </div>` : ""}
       <section class="panel">
         <header class="panel-header">
@@ -1484,7 +1484,7 @@
                 <tr>
                   <th scope="col">家族</th>
                   <th scope="col">電話番号</th>
-                  <th scope="col">対象利用者</th>
+                  <th scope="col">対象患者</th>
                   <th scope="col">LINE連携</th>
                   <th scope="col">閲覧・変更権限</th>
                   <th scope="col">操作</th>
@@ -1502,7 +1502,7 @@
                       link.canViewSchedule ? "予定閲覧" : null,
                       link.canRequestChange ? "変更依頼" : null
                     ].filter(Boolean);
-                    return `${rider?.fullName || "利用者"}：${scopes.join("・") || "権限なし"}`;
+                    return `${rider?.fullName || "患者"}：${scopes.join("・") || "権限なし"}`;
                   });
                   const canApprove =
                     canManage &&
@@ -1519,7 +1519,7 @@
                         <span class="secondary-cell">${escapeHtml(guardian.guardianCode)}${guardian.relationship ? `・${escapeHtml(guardian.relationship)}` : ""}</span>
                       </td>
                       <td data-label="電話番号">${escapeHtml(guardian.phone || "―")}</td>
-                      <td data-label="対象利用者">${escapeHtml(riderNames.join("、") || "未紐付け")}</td>
+                      <td data-label="対象患者">${escapeHtml(riderNames.join("、") || "未紐付け")}</td>
                       <td data-label="LINE連携">
                         ${guardian.hasLineLink
                           ? statusBadge(guardian.linkStatus, labels.guardianLinkStatus)
@@ -1541,7 +1541,7 @@
                 }).join("")}
               </tbody>
             </table>
-          </div>` : emptyState("♧", "家族が登録されていません", "利用者を選択し、家族番号・氏名・電話番号を登録してください。", canManage && state.data.riders.length ? '<button type="button" class="button" data-action="open-guardian-form">家族を登録</button>' : "")}
+          </div>` : emptyState("♧", "家族が登録されていません", "患者を選択し、家族番号・氏名・電話番号を登録してください。", canManage && state.data.riders.length ? '<button type="button" class="button" data-action="open-guardian-form">家族を登録</button>' : "")}
       </section>`;
   }
 
@@ -1565,26 +1565,26 @@
       ${!state.data.riders.length || locations.length < 2 ? `
         <div class="info-strip is-warning">
           <span aria-hidden="true">△</span>
-          <div><strong>定期予定を登録する前に準備が必要です。</strong><br>利用者と、乗車場所・降車場所を登録してください。</div>
+          <div><strong>定期予定を登録する前に準備が必要です。</strong><br>患者と、乗車場所・降車場所を登録してください。</div>
         </div>` : ""}
       <section class="split-grid">
         <div class="panel">
           <header class="panel-header">
             <div>
               <h2 class="panel-title">曜日別予定</h2>
-              <p class="panel-subtitle">時間は5分単位、事業所の運行時間内で登録します。</p>
+              <p class="panel-subtitle">時間は5分単位、診療所の運行時間内で登録します。</p>
             </div>
             <span class="status-badge status-active">${schedules.length}件</span>
           </header>
           ${schedules.length ? `
             <div class="data-table-wrap">
               <table class="data-table">
-                <thead><tr><th>曜日・利用者</th><th>区分</th><th>時間</th><th>乗車場所</th><th>降車場所</th><th>状態</th></tr></thead>
+                <thead><tr><th>曜日・患者</th><th>区分</th><th>時間</th><th>乗車場所</th><th>降車場所</th><th>状態</th></tr></thead>
                 <tbody>
                   ${schedules.map((schedule) => {
                     const rider = riderById.get(schedule.riderId);
                     return `<tr>
-                      <td class="cell-primary" data-label="曜日・利用者"><span class="primary-cell">${escapeHtml(labels.days[schedule.dayOfWeek])}曜日・${escapeHtml(rider?.fullName || "利用者不明")}</span><span class="secondary-cell">${escapeHtml(schedule.routeGroupCode || "A")}</span></td>
+                      <td class="cell-primary" data-label="曜日・患者"><span class="primary-cell">${escapeHtml(labels.days[schedule.dayOfWeek])}曜日・${escapeHtml(rider?.fullName || "患者不明")}</span><span class="secondary-cell">${escapeHtml(schedule.routeGroupCode || "A")}</span></td>
                       <td data-label="区分">${escapeHtml(labels.serviceType[schedule.serviceType] || schedule.serviceType)}</td>
                       <td data-label="時間">${escapeHtml(formatTime(schedule.scheduledPickupTime))} → ${escapeHtml(formatTime(schedule.scheduledDropoffTime))}</td>
                       <td data-label="乗車場所">${escapeHtml(locationById.get(schedule.pickupLocationId)?.locationName || "―")}</td>
@@ -1594,13 +1594,13 @@
                   }).join("")}
                 </tbody>
               </table>
-            </div>` : emptyState("▦", "定期予定が登録されていません", "利用者と乗降場所を登録後、曜日別の予定を作成してください。", state.data.riders.length && locations.length >= 2 ? '<button type="button" class="button" data-action="open-schedule-form">定期予定を登録</button>' : "")}
+            </div>` : emptyState("▦", "定期予定が登録されていません", "患者と乗降場所を登録後、曜日別の予定を作成してください。", state.data.riders.length && locations.length >= 2 ? '<button type="button" class="button" data-action="open-schedule-form">定期予定を登録</button>' : "")}
         </div>
         <aside class="panel">
           <header class="panel-header">
             <div>
               <h2 class="panel-title">登録済み乗降場所</h2>
-              <p class="panel-subtitle">施設共通・利用者別</p>
+              <p class="panel-subtitle">施設共通・患者別</p>
             </div>
           </header>
           <div class="panel-body">
@@ -1609,7 +1609,7 @@
                 ${locations.slice(0, 12).map((location) => `
                   <article class="record-card">
                     <div class="record-card-header">
-                      <div><h3>${escapeHtml(location.locationName)}</h3><p class="record-code">${escapeHtml(location.locationType === "facility" ? "施設共通" : "利用者別")}</p></div>
+                      <div><h3>${escapeHtml(location.locationName)}</h3><p class="record-code">${escapeHtml(location.locationType === "facility" ? "施設共通" : "患者別")}</p></div>
                       ${statusBadge(location.isActive ? "active" : "inactive", { active: "有効", inactive: "停止" })}
                     </div>
                     <p>${escapeHtml(location.addressLine1 || "住所未設定")}</p>
@@ -1695,12 +1695,12 @@
         ${requests.length ? `
           <div class="data-table-wrap">
             <table class="data-table">
-              <thead><tr><th>利用者・送迎日</th><th>依頼種別</th><th>変更内容</th><th>状態</th><th>受付日時</th><th>操作</th></tr></thead>
+              <thead><tr><th>患者・送迎日</th><th>依頼種別</th><th>変更内容</th><th>状態</th><th>受付日時</th><th>操作</th></tr></thead>
               <tbody>
                 ${requests.map((request) => {
                   const rider = riderById.get(request.riderId);
                   return `<tr>
-                    <td class="cell-primary" data-label="利用者・送迎日"><span class="primary-cell">${escapeHtml(rider?.fullName || "利用者不明")}</span><span class="secondary-cell">${escapeHtml(formatDate(request.serviceDate, { year: true, weekday: true }))}</span></td>
+                    <td class="cell-primary" data-label="患者・送迎日"><span class="primary-cell">${escapeHtml(rider?.fullName || "患者不明")}</span><span class="secondary-cell">${escapeHtml(formatDate(request.serviceDate, { year: true, weekday: true }))}</span></td>
                     <td data-label="依頼種別">${escapeHtml(labels.requestType[request.requestType] || request.requestType)}</td>
                     <td data-label="変更内容">${escapeHtml(changeSummary(request.requestedChanges))}</td>
                     <td data-label="状態">${statusBadge(request.requestStatus, labels.requestStatus)}</td>
@@ -1758,7 +1758,7 @@
           <header class="panel-header">
             <div>
               <h2 class="panel-title">デモ環境の準備</h2>
-              <p class="panel-subtitle">架空の利用者4名、家族1名、スタッフ2名、車両2台、平日の定期予定40件を重複なく準備します。</p>
+              <p class="panel-subtitle">架空の患者4名、家族1名、スタッフ2名、車両2台、平日の定期予定40件を重複なく準備します。</p>
             </div>
             ${statusBadge(
               demoPrepare?.prepared
@@ -1794,11 +1794,11 @@
       ["データベース", check.database?.status, check.database?.version],
       ["必要テーブル・RPC", (check.database?.missingTables?.length || check.database?.missingRpcs?.length) ? "fail" : "pass", `不足テーブル ${check.database?.missingTables?.length || 0}／不足RPC ${check.database?.missingRpcs?.length || 0}`],
       ["RLS", check.database?.rlsDisabledTables?.length ? "fail" : "pass", `無効テーブル ${check.database?.rlsDisabledTables?.length || 0}`],
-      ["事業所設定", check.facility?.status, `${check.facility?.businessStartTime || "―"}～${check.facility?.businessEndTime || "―"}／${check.facility?.scheduleStepMinutes || "―"}分単位`],
+      ["診療所設定", check.facility?.status, `${check.facility?.businessStartTime || "―"}～${check.facility?.businessEndTime || "―"}／${check.facility?.scheduleStepMinutes || "―"}分単位`],
       ["電話番号正規化", check.phoneNormalization?.status, check.phoneNormalization?.normalizedValue],
       ["production_guard", check.productionGuard?.status, check.facility?.environment],
-      ["デモデータ", check.demoData?.status, check.demoData?.prepared ? `スタッフ ${check.demoData?.staffCount || 0}名／車両 ${check.demoData?.vehicleCount || 0}台／利用者 ${check.demoData?.riderCount || 0}名／定期予定 ${check.demoData?.scheduleCount || 0}件` : "システム確認からデモデータを準備してください"],
-      ["家族デモポータル", check.demoData?.memberLoginReady ? "pass" : "pending", check.demoData?.memberLoginReady ? `家族 ${check.demoData?.guardianCount || 0}名／利用者紐づけ ${check.demoData?.guardianLinkCount || 0}件` : "デモデータ準備で家族情報を作成します"],
+      ["デモデータ", check.demoData?.status, check.demoData?.prepared ? `スタッフ ${check.demoData?.staffCount || 0}名／車両 ${check.demoData?.vehicleCount || 0}台／患者 ${check.demoData?.riderCount || 0}名／定期予定 ${check.demoData?.scheduleCount || 0}件` : "システム確認からデモデータを準備してください"],
+      ["家族デモポータル", check.demoData?.memberLoginReady ? "pass" : "pending", check.demoData?.memberLoginReady ? `家族 ${check.demoData?.guardianCount || 0}名／患者紐づけ ${check.demoData?.guardianLinkCount || 0}件` : "デモデータ準備で家族情報を作成します"],
       ["ブラウザCORS", check.browserCors?.status, check.browserCors?.status === "pass" ? "許可元設定済み" : "フロント公開前に設定"],
       ["LINE会員認証", check.lineMemberAuthentication?.status, check.lineMemberAuthentication?.configured ? "LINE Channel ID設定済み" : "本番LIFF公開前にLINE Channel IDを設定"],
       ["レート制限", check.rateLimiting?.status, check.rateLimiting?.status === "pass" ? "設定済み" : "本番前に推奨"]
@@ -1864,7 +1864,7 @@
       title: "ログイン情報",
       body: `
         <div class="record-details">
-          <div class="record-line"><span class="record-label">事業所</span><span class="record-value">${escapeHtml(state.facility?.facilityName || "DPRO 福祉施設送迎")}</span></div>
+          <div class="record-line"><span class="record-label">診療所</span><span class="record-value">${escapeHtml(state.facility?.facilityName || "DPRO 診療所送迎予約")}</span></div>
           <div class="record-line"><span class="record-label">権限</span><span class="record-value">${escapeHtml(labels.roles[state.role] || state.role || "―")}</span></div>
           <div class="record-line"><span class="record-label">認証方法</span><span class="record-value">${escapeHtml(state.loginMode === "staff" ? "スタッフID" : "管理コード")}</span></div>
           <div class="record-line"><span class="record-label">環境</span><span class="record-value">${escapeHtml(state.facility?.environment || config.environment || "―")}</span></div>
@@ -1892,12 +1892,12 @@
 
   function openRiderForm() {
     openModal({
-      title: "利用者を登録",
+      title: "患者を登録",
       wide: true,
       body: `
         <form id="rider-form" novalidate>
           <div class="form-grid">
-            ${textField("riderCode", "利用者番号", { required: true, placeholder: "例：R-001", maxlength: 40 })}
+            ${textField("riderCode", "患者番号", { required: true, placeholder: "例：R-001", maxlength: 40 })}
             ${textField("fullName", "氏名", { required: true, autocomplete: "name", maxlength: 100 })}
             ${textField("fullNameKana", "ふりがな", { maxlength: 100 })}
             ${textField("phone", "電話番号", { inputmode: "tel", autocomplete: "tel", maxlength: 30, placeholder: "例：090-1234-5678" })}
@@ -1974,7 +1974,7 @@
     const riders = state.data.riders || [];
     if (!riders.length) {
       showToast(
-        "家族と紐づける利用者を先に登録してください。",
+        "家族と紐づける患者を先に登録してください。",
         "warning"
       );
       return;
@@ -2007,7 +2007,7 @@
               placeholder: "例：090-1234-5678"
             })}
             <div class="field is-full">
-              <label for="guardian-rider-id">閲覧対象の利用者<span class="required-mark">必須</span></label>
+              <label for="guardian-rider-id">閲覧対象の患者<span class="required-mark">必須</span></label>
               <select id="guardian-rider-id" name="riderId" required>
                 <option value="">選択してください</option>
                 ${riders.map((rider) => `<option value="${escapeHtml(rider.id)}">${escapeHtml(rider.fullName)}（${escapeHtml(rider.riderCode)}）</option>`).join("")}
@@ -2068,14 +2068,14 @@
       });
     } catch (error) {
       throw new Error(
-        `家族情報は登録されましたが、利用者との紐づけを完了できませんでした。画面を更新して家族番号「${guardianBody.guardianCode}」をご確認ください。${error?.message ? `（${error.message}）` : ""}`
+        `家族情報は登録されましたが、患者との紐づけを完了できませんでした。画面を更新して家族番号「${guardianBody.guardianCode}」をご確認ください。${error?.message ? `（${error.message}）` : ""}`
       );
     }
     closeModal();
     await Promise.all([loadGuardians(), loadGuardianLinks()]);
     renderFamilies();
     showToast(
-      `${guardianBody.fullName}さんを登録し、利用者と紐づけました。`
+      `${guardianBody.fullName}さんを登録し、患者と紐づけました。`
     );
   }
 
@@ -2133,7 +2133,7 @@
     }
     if (
       !window.confirm(
-        `${guardian.fullName}さんのLINEアカウント連携を解除します。\n再利用するには、ご家族からの再申請と事業所の再承認が必要です。実行しますか？`
+        `${guardian.fullName}さんのLINEアカウント連携を解除します。\n再利用するには、ご家族からの再申請と診療所の再承認が必要です。実行しますか？`
       )
     ) {
       return;
@@ -2253,7 +2253,7 @@
       try {
         await loadRiders("");
       } catch {
-        // フォーム内で利用者なしとして扱う。
+        // フォーム内で患者なしとして扱う。
       }
     }
     openModal({
@@ -2271,7 +2271,7 @@
               </select>
             </div>
             <div class="field" id="location-rider-field">
-              <label for="location-rider">利用者<span class="required-mark">必須</span></label>
+              <label for="location-rider">患者<span class="required-mark">必須</span></label>
               <select id="location-rider" name="riderId" required>
                 <option value="">選択してください</option>
                 ${(state.data.riders || []).map((rider) => `<option value="${escapeHtml(rider.id)}">${escapeHtml(rider.fullName)}（${escapeHtml(rider.riderCode)}）</option>`).join("")}
@@ -2331,7 +2331,7 @@
 
   async function openScheduleForm() {
     if (!state.data.riders.length || state.data.locations.length < 2) {
-      showToast("利用者と乗降場所を先に登録してください。", "warning");
+      showToast("患者と乗降場所を先に登録してください。", "warning");
       return;
     }
     const today = jstDateString(new Date());
@@ -2342,7 +2342,7 @@
         <form id="schedule-form" novalidate>
           <div class="form-grid">
             <div class="field">
-              <label for="schedule-rider">利用者<span class="required-mark">必須</span></label>
+              <label for="schedule-rider">患者<span class="required-mark">必須</span></label>
               <select id="schedule-rider" name="riderId" required>
                 <option value="">選択してください</option>
                 ${state.data.riders.map((rider) => `<option value="${escapeHtml(rider.id)}">${escapeHtml(rider.fullName)}（${escapeHtml(rider.riderCode)}）</option>`).join("")}
@@ -2507,14 +2507,14 @@
         </div>
         ${assignmentControls}
         <section class="panel">
-          <header class="panel-header"><div><h3 class="panel-title">利用者・乗降状況</h3><p class="panel-subtitle">内部メモや不要な個人情報は表示しません。</p></div></header>
+          <header class="panel-header"><div><h3 class="panel-title">患者・乗降状況</h3><p class="panel-subtitle">内部メモや不要な個人情報は表示しません。</p></div></header>
           ${stops.length ? `
             <div class="data-table-wrap">
               <table class="data-table">
-                <thead><tr><th>順番・利用者</th><th>予定時刻</th><th>状態</th><th>移動支援</th><th>乗車場所</th><th>降車場所</th></tr></thead>
+                <thead><tr><th>順番・患者</th><th>予定時刻</th><th>状態</th><th>移動支援</th><th>乗車場所</th><th>降車場所</th></tr></thead>
                 <tbody>
                   ${stops.map((stop) => `<tr>
-                    <td class="cell-primary" data-label="順番・利用者"><span class="primary-cell">${Number(stop.stopOrder || 0)}. ${escapeHtml(stop.rider?.fullName || "利用者不明")}</span><span class="secondary-cell">${escapeHtml(stop.rider?.riderCode || "―")}</span></td>
+                    <td class="cell-primary" data-label="順番・患者"><span class="primary-cell">${Number(stop.stopOrder || 0)}. ${escapeHtml(stop.rider?.fullName || "患者不明")}</span><span class="secondary-cell">${escapeHtml(stop.rider?.riderCode || "―")}</span></td>
                     <td data-label="予定時刻">${escapeHtml(formatTime(stop.plannedPickupAt))}</td>
                     <td data-label="状態">${statusBadge(stop.stopStatus, labels.stopStatus)}</td>
                     <td data-label="移動支援">${escapeHtml(labels.supportLevel[stop.rider?.transportSupportLevel] || "―")}</td>
@@ -2523,7 +2523,7 @@
                   </tr>`).join("")}
                 </tbody>
               </table>
-            </div>` : emptyState("♙", "利用者の割当はありません", "この便にはまだ利用者が割り当てられていません。", "")}
+            </div>` : emptyState("♙", "患者の割当はありません", "この便にはまだ患者が割り当てられていません。", "")}
         </section>`,
       footer: '<a class="button button-secondary" href="staff.html">現場スタッフ画面</a><button type="button" class="button" data-modal-close-button>閉じる</button>',
       onReady: (dialog) => {
@@ -2751,7 +2751,7 @@
       return;
     }
     const confirmed = window.confirm(
-      "架空の利用者・家族・スタッフ・車両・定期予定を準備します。\n同じ操作を再実行しても重複登録されません。実行しますか？"
+      "架空の患者・家族・スタッフ・車両・定期予定を準備します。\n同じ操作を再実行しても重複登録されません。実行しますか？"
     );
     if (!confirmed) return;
     setBusy(button, true, "準備中…");
@@ -2871,7 +2871,7 @@
     return `
       <div class="field">
         <label for="${id}">${escapeHtml(label)}<span class="required-mark">必須</span></label>
-        <input id="${id}" name="${escapeHtml(name)}" type="time" required step="300" value="${escapeHtml(value)}">
+        <input id="${id}" name="${escapeHtml(name)}" type="time" required step="1800" value="${escapeHtml(value)}">
       </div>`;
   }
 
@@ -2887,7 +2887,7 @@
   function locationOptions(locations) {
     return `
       <option value="">選択してください</option>
-      ${locations.map((location) => `<option value="${escapeHtml(location.id)}">${escapeHtml(location.locationName)}（${location.locationType === "facility" ? "施設共通" : "利用者別"}）</option>`).join("")}`;
+      ${locations.map((location) => `<option value="${escapeHtml(location.id)}">${escapeHtml(location.locationName)}（${location.locationType === "facility" ? "施設共通" : "患者別"}）</option>`).join("")}`;
   }
 
   function nullIfEmpty(value) {
@@ -2912,7 +2912,7 @@
           <div>
             <span class="empty-state-icon">!</span>
             <h1>設定ファイルを確認してください</h1>
-            <p>API接続先または事業所コードが設定されていません。</p>
+            <p>API接続先または診療所コードが設定されていません。</p>
           </div>
         </div>`;
       return;

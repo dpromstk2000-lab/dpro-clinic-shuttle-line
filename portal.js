@@ -79,7 +79,7 @@
 
   const facilityName =
     isDemo
-      ? "DPRO 福祉施設送迎 デモ事業所"
-      : "DPRO 福祉施設送迎";
+      ? "DPRO 診療所送迎予約 デモ診療所"
+      : "DPRO 診療所送迎予約";
   setText("facility-name", facilityName);
 })();

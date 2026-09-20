@@ -2,12 +2,12 @@
   "schema_version": "DPRO_TUTORIAL_CONTENT_PACKAGE_V1.1-DESIGN",
   "phase": "R2_INFORMATION_DESIGN",
   "system": {
-    "system_code": "WELFARE_SHUTTLE",
-    "system_name": "DPRO 福祉施設送迎 LINE",
-    "repository": "dpromstk2000-lab/dpro-welfare-shuttle-line",
+    "system_code": "CLINIC_SHUTTLE",
+    "system_name": "DPRO 診療所送迎予約",
+    "repository": "dpromstk2000-lab/dpro-clinic-shuttle-line",
     "locked_sha": "67da4ac367f67e6cafecb906f417a375b3b33c3e",
-    "pages_root": "https://dpromstk2000-lab.github.io/dpro-welfare-shuttle-line/",
-    "product_site": "https://dpro-shop.com/systems/shuttle",
+    "pages_root": "https://dpromstk2000-lab.github.io/dpro-clinic-shuttle-line/",
+    "product_site": "https://dpro-shop.com/",
     "timezone": "Asia/Tokyo",
     "environment_observed": "demo"
   },
@@ -59,7 +59,7 @@
     },
     {
       "role_key": "family_guardian",
-      "label": "ご家族・保護者",
+      "label": "患者・ご家族",
       "screens": [
         "member.html"
       ]
@@ -129,18 +129,18 @@
     {
       "id": "F10-03",
       "order": 3,
-      "title": "利用者を確認",
+      "title": "患者を確認",
       "role": "admin/dispatcher",
       "page": "owner.html",
       "route": "owner.html#riders-conceptual",
-      "purpose": "利用者一覧と検索の位置を知る",
-      "normal_entry_point": "左メニュー 利用者",
+      "purpose": "患者一覧と検索の位置を知る",
+      "normal_entry_point": "左メニュー 患者",
       "target_selector_candidates": [
         "[data-section=\"riders\"]",
         "#rider-search",
         ".data-table"
       ],
-      "fallback_copy": "「利用者」では、送迎利用者を検索・確認します。Tutorialは登録や編集は行いません。",
+      "fallback_copy": "「患者」では、送迎患者を検索・確認します。Tutorialは登録や編集は行いません。",
       "allowed_behavior": [
         "navigate-section",
         "highlight",
@@ -171,7 +171,7 @@
         ".panel",
         ".data-table"
       ],
-      "fallback_copy": "「家族・LINE連携」では、家族情報と利用者との関係、連携状態を確認します。",
+      "fallback_copy": "「家族・LINE連携」では、家族情報と患者との関係、連携状態を確認します。",
       "allowed_behavior": [
         "navigate-section",
         "highlight",
@@ -316,7 +316,7 @@
       "role": "driver/attendant",
       "page": "staff.html",
       "route": "staff.html",
-      "purpose": "担当便・利用者・現在状態を確認する場所を知る",
+      "purpose": "担当便・患者・現在状態を確認する場所を知る",
       "normal_entry_point": "スタッフ運行画面",
       "target_selector_candidates": [
         "#staff-app",
@@ -348,13 +348,13 @@
       "page": "member.html",
       "route": "member.html",
       "purpose": "送迎予定・現在状態・変更依頼の入口を理解する",
-      "normal_entry_point": "家族連絡画面",
+      "normal_entry_point": "患者・ご家族画面",
       "target_selector_candidates": [
         "#member-app",
         "#member-service-date",
         "#member-change-form"
       ],
-      "fallback_copy": "家族画面では予定と状況を確認し、必要時に変更内容を事業所へ連絡できます。Tutorialは送信しません。",
+      "fallback_copy": "家族画面では予定と状況を確認し、必要時に変更内容を診療所へ連絡できます。Tutorialは送信しません。",
       "allowed_behavior": [
         "highlight",
         "explain"
@@ -436,7 +436,7 @@
         "title": "管理・配車",
         "topics": [
           "当日運行",
-          "利用者",
+          "患者",
           "家族・LINE連携",
           "定期予定",
           "車両・スタッフ",

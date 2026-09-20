@@ -1,11 +1,15 @@
 window.DPRO_SHUTTLE_CONFIG = Object.freeze({
-  apiBaseUrl: "https://dpro-welfare-shuttle-line-api.dpromstk2000.workers.dev",
-  facilityCode: "dpro_welfare_shuttle_demo",
+  systemCode: "CLINIC_SHUTTLE",
+  productName: "DPRO 診療所送迎予約",
+  apiBaseUrl: "https://dpro-clinic-shuttle-line-api.dpromstk2000.workers.dev",
+  facilityCode: "dpro_clinic_shuttle_demo",
   environment: "demo",
-  version: "SHUTTLE-9-FRONTEND-20260729",
+  version: "CLINIC-SHUTTLE-V2.1-R1-20260920",
+  databaseSchema: "dpro_clinic_shuttle",
+  reservationSlotMinutes: 30,
   timezone: "Asia/Tokyo",
-  sessionStorageKey: "dpro_shuttle_session_v1",
-  memberSessionStorageKey: "dpro_shuttle_member_session_v1",
+  sessionStorageKey: "dpro_clinic_shuttle_session_v1",
+  memberSessionStorageKey: "dpro_clinic_shuttle_member_session_v1",
   liffId: "",
   requestTimeoutMs: 12000
 });

@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "dpro_welfare_shuttle_tutorial_v1";
-  const ROLE_KEY = "dpro_welfare_shuttle_tutorial_role_v1";
+  const STORAGE_KEY = "dpro_clinic_shuttle_tutorial_v1";
+  const ROLE_KEY = "dpro_clinic_shuttle_tutorial_role_v1";
   const SAFE_PAGES = new Set(["index.html", "owner.html", "owner-ipad.html", "staff.html", "member.html"]);
   const OWNER_SECTION_BY_STEP = Object.freeze({
     "F10-02": "today",
