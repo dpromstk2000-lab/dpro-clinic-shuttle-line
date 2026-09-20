@@ -1,0 +1,54 @@
+name: DPRO Clinic Shuttle Final Brushup
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dpro-clinic-shuttle-final-brushup.yml"
+      - ".github/workflows/dpro-clinic-shuttle-final-brushup.py"
+
+permissions:
+  contents: write
+
+jobs:
+  final-brushup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply final brushup
+        run: python .github/workflows/dpro-clinic-shuttle-final-brushup.py
+
+      - name: JavaScript syntax check
+        run: |
+          node --check worker.js
+          node --check member.js
+          node --check config.js
+
+      - name: JSON check
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          json.loads(Path("CLINIC_SHUTTLE_BUILD_SPEC_V2_1.json").read_text(encoding="utf-8"))
+          PY
+
+      - name: Diff check
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Commit final brushup
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO Factory Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add member.js member.css worker.js config.js system-check.html CLINIC_SHUTTLE_BUILD_SPEC_V2_1.json FINAL_BRUSHUP_STATUS.txt
+          git commit -m "Apply final clinic shuttle brushup"
+          git push
