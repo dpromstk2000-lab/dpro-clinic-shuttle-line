@@ -7343,14 +7343,15 @@ function requirePhone(value, label) {
     );
   }
   const phone = value.trim();
-  if (!normalizeJapanesePhone(phone)) {
+  const normalizedPhone = normalizeJapanesePhone(phone);
+  if (!normalizedPhone) {
     throw new AppError(
       400,
       "INVALID_PHONE",
       `${label}は日本国内の電話番号で入力してください。`
     );
   }
-  return phone;
+  return normalizedPhone;
 }
 
 function optionalPhone(value, label) {
