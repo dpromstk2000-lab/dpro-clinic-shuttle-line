@@ -166,6 +166,14 @@ export default {
             requestId
           );
 
+        case "POST /v1/auth/refresh":
+          return await handleRefreshSession(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
         case "POST /v1/auth/logout":
           return await handleLogout(
             request,
@@ -1177,6 +1185,62 @@ async function handleMemberHome(
       changeRequests: (changeRows || []).map(
         publicMemberChangeRequest
       ),
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleRefreshSession(
+  request,
+  env,
+  corsOrigin,
+  requestId
+) {
+  await readJsonObject(request, { allowEmpty: true });
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "driver",
+    "attendant",
+    "reception",
+    "guardian",
+  ]);
+
+  await enforceRateLimit(request, env, "session-refresh", session);
+
+  const facility = await findFacilityById(env, session.facilityId);
+  assertFacilityEnvironment(facility, env);
+
+  const token = await issueSessionToken(
+    {
+      subject: session.subject,
+      facilityId: session.facilityId,
+      actorType: session.actorType,
+      actorId: session.actorId,
+      role: session.role,
+      displayName: session.displayName || "",
+    },
+    env
+  );
+
+  if (session.actorType === "staff" && isUuid(session.actorId)) {
+    await revokeStaffSession(
+      env,
+      session.facilityId,
+      session.actorId,
+      session.jti,
+      "session_refresh"
+    );
+  }
+
+  return successResponse(
+    {
+      token,
+      expiresIn: getTokenTtlSeconds(env),
+      role: session.role,
+      facility: publicFacility(facility),
     },
     200,
     corsOrigin,

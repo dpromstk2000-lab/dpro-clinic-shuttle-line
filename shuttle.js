@@ -328,11 +328,81 @@
     return "通信できませんでした。時間をおいて、もう一度お試しください。";
   }
 
+  let sessionRefreshPromise = null;
+
+  function tokenSecondsRemaining(token) {
+    try {
+      const payloadPart = String(token || "").split(".")[1];
+      if (!payloadPart) return 0;
+      const normalized = payloadPart
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+      const padded =
+        normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+      const payload = JSON.parse(atob(padded));
+      return Number(payload.exp || 0) - Math.floor(Date.now() / 1000);
+    } catch {
+      return 0;
+    }
+  }
+
+  async function refreshSessionIfNeeded() {
+    if (!state.token) return;
+
+    const remaining = tokenSecondsRemaining(state.token);
+    if (remaining <= 0 || remaining > 600) return;
+    if (sessionRefreshPromise) return sessionRefreshPromise;
+
+    const base = String(config.apiBaseUrl || "").replace(/\/+$/, "");
+
+    sessionRefreshPromise = (async () => {
+      const response = await fetch(`${base}/v1/auth/refresh`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`
+        },
+        body: "{}",
+        cache: "no-store"
+      });
+
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        payload = {};
+      }
+
+      if (!response.ok || payload.ok === false || !payload.token) {
+        throw new Error(
+          payload?.error?.message ||
+          "ログインの有効期限が切れました。もう一度ログインしてください。"
+        );
+      }
+
+      state.token = payload.token;
+      saveSession();
+    })().finally(() => {
+      sessionRefreshPromise = null;
+    });
+
+    return sessionRefreshPromise;
+  }
+
   async function api(path, options = {}) {
     if (mockMode) return mockApi(path, options);
     const base = String(config.apiBaseUrl || "").replace(/\/+$/, "");
     if (!base.startsWith("https://")) {
       throw new Error("API接続先が正しく設定されていません。");
+    }
+
+    if (state.token && !path.startsWith("/v1/auth/")) {
+      try {
+        await refreshSessionIfNeeded();
+      } catch {
+        // 本リクエストの401処理で安全にログイン画面へ戻す。
+      }
     }
     const controller = new AbortController();
     const timeout = window.setTimeout(

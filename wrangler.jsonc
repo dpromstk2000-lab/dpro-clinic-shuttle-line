@@ -12,7 +12,8 @@
     "PRODUCTION_GUARD": "enabled",
     "DPRO_SYSTEM_CODE": "CLINIC_SHUTTLE",
     "SUPABASE_SCHEMA": "dpro_clinic_shuttle",
-    "SUPABASE_URL": "https://cbknucemarcpbscirzyv.supabase.co"
+    "SUPABASE_URL": "https://cbknucemarcpbscirzyv.supabase.co",
+    "SESSION_TTL_SECONDS": "1800"
   },
   "observability": {
     "enabled": true
