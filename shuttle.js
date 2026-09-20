@@ -24,6 +24,8 @@
     data: {
       dashboard: null,
       riders: [],
+      riderQueryRequired: false,
+      riderSearchPerformed: false,
       guardians: [],
       guardianLinks: [],
       regularSchedules: [],
@@ -256,6 +258,8 @@
     state.data = {
       dashboard: null,
       riders: [],
+      riderQueryRequired: false,
+      riderSearchPerformed: false,
       guardians: [],
       guardianLinks: [],
       regularSchedules: [],
@@ -1192,10 +1196,15 @@
     } else if (action === "search-riders") {
       await loadRiders(String(document.getElementById("rider-search")?.value || ""));
       renderRiders();
+    } else if (action === "show-all-riders") {
+      const input = document.getElementById("rider-search");
+      if (input) input.value = "";
+      await loadRiders("", true);
+      renderRiders();
     } else if (action === "clear-rider-search") {
       const input = document.getElementById("rider-search");
       if (input) input.value = "";
-      await loadRiders("");
+      await loadRiders("", false);
       renderRiders();
     } else if (action === "show-section") {
       state.activeSection = actionButton.dataset.sectionTarget;
@@ -1234,19 +1243,19 @@
         renderRiders();
       } else if (state.activeSection === "families") {
         await Promise.all([
-          loadRiders(""),
+          loadRiders("", true),
           loadGuardians(),
           loadGuardianLinks()
         ]);
         renderFamilies();
       } else if (state.activeSection === "schedules") {
-        await Promise.all([loadSchedules(), loadLocations(), loadRiders("")]);
+        await Promise.all([loadSchedules(), loadLocations(), loadRiders("", true)]);
         renderSchedules();
       } else if (state.activeSection === "resources") {
         await Promise.all([loadStaff(), loadVehicles()]);
         renderResources();
       } else if (state.activeSection === "changes") {
-        await Promise.all([loadChanges(), loadRiders("")]);
+        await Promise.all([loadChanges(), loadRiders("", true)]);
         renderChanges();
       } else if (state.activeSection === "system") {
         renderSystem();
@@ -1265,10 +1274,17 @@
     state.data.dashboard = result.dashboard;
   }
 
-  async function loadRiders(search = "") {
-    const suffix = search ? `?query=${encodeURIComponent(search)}&limit=100` : "?limit=100";
+  async function loadRiders(search = "", explicitAll = false) {
+    const normalized = String(search || "").trim();
+    const suffix = normalized
+      ? `?query=${encodeURIComponent(normalized)}&limit=100`
+      : explicitAll
+        ? "?all=1&limit=100"
+        : "?limit=100";
     const result = await api(`/v1/riders${suffix}`);
     state.data.riders = result.riders || [];
+    state.data.riderQueryRequired = result.queryRequired === true;
+    state.data.riderSearchPerformed = Boolean(normalized) || explicitAll;
   }
 
   async function loadGuardians() {
@@ -1464,10 +1480,32 @@
           <div class="search-group">
             <input class="control" id="rider-search" type="search" maxlength="100" placeholder="氏名・電話番号・患者番号" aria-label="患者検索">
             <button type="button" class="button" data-action="search-riders">検索</button>
+            <button type="button" class="button button-secondary" data-action="show-all-riders">全件表示</button>
             <button type="button" class="button button-secondary" data-action="clear-rider-search">クリア</button>
           </div>
         </header>
-        ${riders.length ? renderRidersTable(riders) : emptyState("♙", "患者が登録されていません", "最初に送迎を利用する方の基本情報を登録してください。医療・健康情報は必要最小限だけ入力します。", '<button type="button" class="button" data-action="open-rider-form">患者を登録</button>')}
+        ${riders.length
+          ? renderRidersTable(riders)
+          : state.data.riderQueryRequired
+            ? emptyState(
+                "♙",
+                "患者を検索してください",
+                "氏名・電話番号・患者番号で検索するか、「全件表示」で最大100件まで表示できます。",
+                '<button type="button" class="button button-secondary" data-action="show-all-riders">全件表示</button>'
+              )
+            : state.data.riderSearchPerformed
+              ? emptyState(
+                  "♙",
+                  "該当する患者はいません",
+                  "検索条件を変更するか、クリアしてもう一度お試しください。",
+                  '<button type="button" class="button button-secondary" data-action="clear-rider-search">検索をクリア</button>'
+                )
+              : emptyState(
+                  "♙",
+                  "患者が登録されていません",
+                  "最初に送迎を利用する方の基本情報を登録してください。医療・健康情報は必要最小限だけ入力します。",
+                  '<button type="button" class="button" data-action="open-rider-form">患者を登録</button>'
+                )}
       </section>`;
   }
 
@@ -2038,7 +2076,7 @@
     };
     await api("/v1/riders", { method: "POST", body });
     closeModal();
-    await loadRiders("");
+    await loadRiders("", true);
     renderRiders();
     showToast(`${body.fullName}さんを登録しました。`);
   }
@@ -2331,7 +2369,7 @@
   async function openLocationForm() {
     if (!state.data.riders.length) {
       try {
-        await loadRiders("");
+        await loadRiders("", true);
       } catch {
         // フォーム内で患者なしとして扱う。
       }
