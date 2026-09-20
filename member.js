@@ -1,5 +1,6 @@
 const PHASE3B_MEMBER_UI_R1 = true;
 const PHASE3B_CANCEL_REASON_MEMBER_R1 = true;
+const FINAL_BRUSHUP_R1 = true;
 
 const runtimeConfig =
   typeof window !== "undefined"
@@ -754,7 +755,8 @@ function renderHomeData(app, session, data) {
           riders,
           data.serviceDate,
           reservations,
-          reservationLocations
+          reservationLocations,
+          stops.length > 0 || schedules.length > 0
         )
       : ""}
     ${riders.some((rider) => rider.canRequestChange) ? renderChangeForm(riders, data.serviceDate) : ""}
@@ -876,7 +878,8 @@ function renderReservationSection(
   riders,
   serviceDate,
   reservations,
-  reservationLocations
+  reservationLocations,
+  hasExistingTransport = false
 ) {
   const allowed = riders.filter((rider) => rider.canRequestChange);
   const today = jstDateString();
@@ -887,14 +890,16 @@ function renderReservationSection(
   const canCreate = allowed.length > 0;
 
   return `
-    <section class="member-card">
-      <header class="member-card-header">
-        <div>
-          <h2>送迎予約</h2>
-          <p>新しい送迎を申し込みます。送信後は診療所の確認待ちになります。</p>
-        </div>
-      </header>
+    <details class="member-card member-disclosure">
+      <summary class="member-disclosure-summary">
+        <span class="member-disclosure-copy">
+          <strong>送迎予約</strong>
+          <span>必要なときだけ開いて、新しい送迎を申し込みます。</span>
+        </span>
+        <span class="member-disclosure-action">入力する</span>
+      </summary>
       <div class="member-card-body">
+        ${hasExistingTransport ? '<div class="member-notice is-warning">この日はすでに送迎予定があります。追加の送迎が必要な場合だけ申し込んでください。</div>' : ""}
         ${canCreate ? `
           <form id="member-reservation-form" novalidate>
             <div class="member-grid">
@@ -959,7 +964,7 @@ function renderReservationSection(
           </form>
         ` : '<div class="member-notice is-warning">この患者の新規送迎予約は診療所へご連絡ください。</div>'}
       </div>
-    </section>
+    </details>
     <section class="member-card">
       <header class="member-card-header">
         <div><h2>予約の状況</h2><p>${escapeHtml(formatDate(serviceDate))}の予約を表示します。</p></div>
@@ -1221,10 +1226,14 @@ function renderChangeForm(riders, serviceDate) {
   const allowed = riders.filter((rider) => rider.canRequestChange);
   const past = isPastJstDate(serviceDate);
   return `
-    <section class="member-card">
-      <header class="member-card-header">
-        <div><h2>欠席・変更を連絡</h2><p>送信後は診療所の確認待ちになります。</p></div>
-      </header>
+    <details class="member-card member-disclosure">
+      <summary class="member-disclosure-summary">
+        <span class="member-disclosure-copy">
+          <strong>欠席・変更を連絡</strong>
+          <span>欠席・時間変更・片道利用などがあるときに開きます。</span>
+        </span>
+        <span class="member-disclosure-action">連絡する</span>
+      </summary>
       <div class="member-card-body">
         ${past ? '<div class="member-notice is-warning">過去日の変更依頼は送信できません。</div>' : ""}
         <form id="member-change-form" novalidate>
@@ -1272,7 +1281,7 @@ function renderChangeForm(riders, serviceDate) {
           </div>
         </form>
       </div>
-    </section>`;
+    </details>`;
 }
 
 function updateChangeFields(form) {

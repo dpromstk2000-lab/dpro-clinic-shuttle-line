@@ -1,0 +1,36 @@
+DPRO 診療所送迎予約 / FINAL BRUSHUP R1
+
+STATUS:
+- FINAL System Check: PASS
+- Cross-role regression QA: PASS
+- Notification runtime QA: PASS
+- Final brushup: APPLIED
+- Next: FINAL 4/4 -> FINAL LOCK
+
+UX:
+- Family portal "送迎予約" is collapsed by default and opens only when needed.
+- Family portal "欠席・変更を連絡" is collapsed by default.
+- Reservation status and change-request status stay visible.
+- Existing shuttle activity on the selected date shows an additional-booking warning.
+- Pickup/dropoff/transfer departure wording remains service-aware.
+
+ERROR UX:
+- Vehicle overlap identifies the vehicle conflict.
+- Staff overlap identifies the staff conflict.
+- Rider overlap identifies the rider conflict.
+- Duplicate-record conflict stays separate.
+
+QA CLEANUP:
+- TEST-R05 soft-deleted; history retained.
+- TEST-G02 soft-deleted; history retained.
+- TEST-R05 regular schedule disabled.
+- TEST-R05 location disabled.
+- Open TEST-R05 reservation cancelled with QA cleanup reason.
+- Historical completed/no-show run records retained.
+- Temporary TEST staff/vehicle/QA overlap run: none active.
+- Temporary DEMO-G01 <-> DEMO-R03 notification link: removed.
+
+RELEASE:
+- Frontend: CLINIC-SHUTTLE-V2.1-R6-20260920
+- Worker: CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920
+- Database: CLINIC-SHUTTLE-V2.1-DB-R2-20260920

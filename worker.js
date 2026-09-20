@@ -11,7 +11,8 @@
  */
 
 const SERVICE_NAME = "DPRO Clinic Shuttle API";
-const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R5.1-20260920";
+const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920";
+const FINAL_BRUSHUP_CONFLICT_MESSAGE_R1 = true;
 const PHASE3C_NOTIFICATION_MESSAGE_FIX_R1 = true;
 const PHASE3C_NOTIFICATION_DELIVERY_R1 = true;
 const PHASE3B_CANCEL_REASON_FIX_R1 = true;
@@ -111,7 +112,7 @@ export default {
               workerVersion: WORKER_VERSION,
               databaseSchema: SUPABASE_SCHEMA,
               requiredDatabaseVersion: DATABASE_VERSION,
-              apiStage: "CLINIC-SHUTTLE-V2.1-R5",
+              apiStage: "CLINIC-SHUTTLE-V2.1-R6",
             },
             200,
             corsOrigin,
@@ -1586,7 +1587,7 @@ const workerPhoneNormalizationOk = workerPhoneValues.every(
     {
       systemCheck: {
         ok: requiredOk,
-        stage: "CLINIC-SHUTTLE-V2.1-R5",
+        stage: "CLINIC-SHUTTLE-V2.1-R6",
         checkedAt: new Date().toISOString(),
         worker: {
           status: "pass",
@@ -7856,17 +7857,31 @@ function mapSupabaseError(status, payload) {
       ? String(payload.message || "")
       : String(payload || "");
 
-  if (
-    status === 409 ||
-    databaseCode === "23505" ||
-    databaseCode === "23P01"
-  ) {
+  if (databaseCode === "23P01") {
+    let publicMessage =
+      "同じ時間帯に予定が重複しています。別の時間または担当を選択してください。";
+    if (internalMessage.includes("車両")) {
+      publicMessage =
+        "この車両は同じ時間帯の別便に割り当て済みです。別の車両を選択してください。";
+    } else if (internalMessage.includes("スタッフ")) {
+      publicMessage =
+        "このスタッフは同じ時間帯の別便に割り当て済みです。別の担当者を選択してください。";
+    } else if (internalMessage.includes("患者")) {
+      publicMessage =
+        "この患者は同じ時間帯の別便に予定があります。時間または便を確認してください。";
+    }
+    return new AppError(
+      409,
+      "SCHEDULE_CONFLICT",
+      publicMessage,
+      internalMessage
+    );
+  }
+  if (status === 409 || databaseCode === "23505") {
     return new AppError(
       409,
       "DUPLICATE_CONFLICT",
-      databaseCode === "23P01"
-        ? "同じ時間帯に車両・スタッフ・患者の予定が重複しています。別の時間または担当を選択してください。"
-        : "同じ内容がすでに登録されています。画面を更新してご確認ください。",
+      "同じ内容がすでに登録されています。画面を更新してご確認ください。",
       internalMessage
     );
   }
