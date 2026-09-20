@@ -152,5 +152,19 @@
     "FACTORY FINAL 4/4",
     "FINAL LOCK and return ZIP"
   ],
-  "current_stage": "SYSTEM_CODE_SEPARATION_COMPLETE_PENDING_GITHUB_RUN"
+  "current_stage": "PHASE3_ADMIN_SURFACES_IMPLEMENTED_PENDING_RUNTIME_QA",
+  "phase3": {
+    "admin_reservation_ui": true,
+    "phone_proxy_reservation": true,
+    "contact_hub_ui": true,
+    "settings_left_index_right_panel": true,
+    "settings_api": true,
+    "contact_status_update_api": true,
+    "pending": [
+      "family_new_reservation_ui",
+      "notification_dispatch",
+      "runtime_phase3_qa",
+      "final_4_of_4"
+    ]
+  }
 }

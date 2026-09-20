@@ -1,0 +1,21 @@
+DPRO 診療所送迎予約 / PHASE 3 STATUS
+
+IMPLEMENTED:
+- 管理側 予約管理画面
+- 電話代理受付
+- 行きのみ / 往復 / 帰りのみ
+- 診療終了後の帰り便待ち
+- CONTACT HUB 一覧 / 新規受付 / 対応中 / 完了
+- 設定画面（左メニュー / 右パネル）
+- 運行時間 / 変更締切 / 当日変更 / 通知設定
+- GET/PATCH /v1/settings
+- PATCH /v1/contact-hub/:id
+- Frontend / Worker version R3
+
+PENDING:
+- 家族/LINE 新規送迎予約UI
+- 通知配送連動
+- PHASE3 runtime QA
+- System Check final
+- FACTORY FINAL 4/4
+- FINAL LOCK

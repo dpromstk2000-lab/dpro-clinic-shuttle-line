@@ -11,7 +11,8 @@
  */
 
 const SERVICE_NAME = "DPRO Clinic Shuttle API";
-const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R2-20260920";
+const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R3-20260920";
+const PHASE3_ADMIN_SURFACES_R1 = true;
 const DATABASE_VERSION = "CLINIC-SHUTTLE-V2.1-DB-R2-20260920";
 const SYSTEM_CODE = "CLINIC_SHUTTLE";
 const SUPABASE_SCHEMA = "dpro_clinic_shuttle";
@@ -106,7 +107,7 @@ export default {
               workerVersion: WORKER_VERSION,
               databaseSchema: SUPABASE_SCHEMA,
               requiredDatabaseVersion: DATABASE_VERSION,
-              apiStage: "CLINIC-SHUTTLE-V2.1-R2",
+              apiStage: "CLINIC-SHUTTLE-V2.1-R3",
             },
             200,
             corsOrigin,
@@ -368,6 +369,22 @@ export default {
 
         case "POST /v1/contact-hub":
           return await handleContactHubCreate(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "GET /v1/settings":
+          return await handleSettingsGet(
+            request,
+            env,
+            corsOrigin,
+            requestId
+          );
+
+        case "PATCH /v1/settings":
+          return await handleSettingsUpdate(
             request,
             env,
             corsOrigin,
@@ -1868,6 +1885,11 @@ async function handleDynamicRoute(
       method: "POST",
       pattern: new RegExp(`^/v1/reservations/${uuidPattern}/return-ready$`, "i"),
       handler: handleReservationReturnReady,
+    },
+    {
+      method: "PATCH",
+      pattern: new RegExp(`^/v1/contact-hub/${uuidPattern}$`, "i"),
+      handler: handleContactHubUpdate,
     },
     {
       method: "PATCH",
@@ -4937,6 +4959,221 @@ async function handleVehicleSoftDelete(request, env, corsOrigin, requestId, vehi
     p_reason: reason,
   });
   return successResponse({ result }, 200, corsOrigin, requestId);
+}
+
+
+function publicSettings(row) {
+  if (!row) return null;
+  return {
+    scheduleStepMinutes: Number(row.schedule_step_minutes),
+    businessStartTime: row.business_start_time,
+    businessEndTime: row.business_end_time,
+    changeDeadlineTime: row.change_deadline_time,
+    sameDayChangeAllowed: Boolean(row.same_day_change_allowed),
+    notifyPreviousDay: Boolean(row.notify_previous_day),
+    notifyDeparture: Boolean(row.notify_departure),
+    notifyBoarding: Boolean(row.notify_boarding),
+    notifyArrival: Boolean(row.notify_arrival),
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+async function loadFacilitySettings(env, facilityId) {
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "facility_id,schedule_step_minutes,business_start_time,business_end_time,change_deadline_time,same_day_change_allowed,notify_previous_day,notify_departure,notify_boarding,notify_arrival,updated_at"
+  );
+  params.set("facility_id", `eq.${facilityId}`);
+  params.set("limit", "1");
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_settings?${params.toString()}`
+  );
+  const settings = Array.isArray(rows) ? rows[0] : null;
+  if (!settings) {
+    throw new AppError(
+      404,
+      "FACILITY_SETTINGS_MISSING",
+      "診療所設定が見つかりません。システム確認を実行してください。"
+    );
+  }
+  return settings;
+}
+
+async function handleSettingsGet(request, env, corsOrigin, requestId) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "settings-get", session);
+  const settings = await loadFacilitySettings(env, session.facilityId);
+  return successResponse(
+    { settings: publicSettings(settings) },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleSettingsUpdate(request, env, corsOrigin, requestId) {
+  const session = await requireSession(request, env, ["admin"]);
+  await enforceRateLimit(request, env, "settings-update", session);
+  const body = await readJsonObject(request);
+
+  const scheduleStepMinutes = requireInteger(
+    body.scheduleStepMinutes,
+    "予約時間単位",
+    30,
+    30
+  );
+  const businessStartTime = requireTime(body.businessStartTime, "運行開始時刻");
+  const businessEndTime = requireTime(body.businessEndTime, "運行終了時刻");
+  const changeDeadlineTime = requireTime(body.changeDeadlineTime, "変更受付締切");
+  const sameDayChangeAllowed = requireBoolean(body.sameDayChangeAllowed, "当日変更");
+  const notifyPreviousDay = requireBoolean(body.notifyPreviousDay, "前日通知");
+  const notifyDeparture = requireBoolean(body.notifyDeparture, "出発通知");
+  const notifyBoarding = requireBoolean(body.notifyBoarding, "乗車通知");
+  const notifyArrival = requireBoolean(body.notifyArrival, "到着通知");
+
+  if (timeToMinutes(businessEndTime) <= timeToMinutes(businessStartTime)) {
+    throw new AppError(
+      400,
+      "INVALID_BUSINESS_HOURS",
+      "運行終了時刻は運行開始時刻より後にしてください。"
+    );
+  }
+
+  const params = new URLSearchParams();
+  params.set("facility_id", `eq.${session.facilityId}`);
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_settings?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: {
+        schedule_step_minutes: scheduleStepMinutes,
+        business_start_time: businessStartTime,
+        business_end_time: businessEndTime,
+        change_deadline_time: changeDeadlineTime,
+        same_day_change_allowed: sameDayChangeAllowed,
+        notify_previous_day: notifyPreviousDay,
+        notify_departure: notifyDeparture,
+        notify_boarding: notifyBoarding,
+        notify_arrival: notifyArrival,
+        updated_at: new Date().toISOString(),
+      },
+      prefer: "return=representation",
+    }
+  );
+  const settings = Array.isArray(rows) ? rows[0] : null;
+  if (!settings) {
+    throw new AppError(
+      409,
+      "SETTINGS_UPDATE_FAILED",
+      "設定を更新できませんでした。画面を更新して、もう一度お試しください。"
+    );
+  }
+
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_settings",
+    entityType: "settings",
+    entityId: session.facilityId,
+    requestId,
+    request,
+    newData: {
+      scheduleStepMinutes,
+      businessStartTime,
+      businessEndTime,
+      changeDeadlineTime,
+      sameDayChangeAllowed,
+      notifyPreviousDay,
+      notifyDeparture,
+      notifyBoarding,
+      notifyArrival,
+    },
+  });
+
+  return successResponse(
+    { settings: publicSettings(settings) },
+    200,
+    corsOrigin,
+    requestId
+  );
+}
+
+async function handleContactHubUpdate(request, env, corsOrigin, requestId, contactId) {
+  const session = await requireSession(request, env, [
+    "admin",
+    "dispatcher",
+    "reception",
+  ]);
+  await enforceRateLimit(request, env, "contact-hub-update", session);
+  const body = await readJsonObject(request);
+  const expectedUpdatedAt = requireIsoTimestamp(body.expectedUpdatedAt, "更新前日時");
+  const patch = {};
+
+  if (body.status !== undefined) {
+    patch.status = requireEnum(
+      body.status,
+      "対応状態",
+      ["new", "assigned", "working", "closed"]
+    );
+  }
+  if (body.assignedStaffId !== undefined) {
+    patch.assigned_staff_id = optionalUuid(body.assignedStaffId, "担当スタッフID");
+  }
+  if (body.linkedRiderId !== undefined) {
+    patch.linked_rider_id = optionalUuid(body.linkedRiderId, "患者ID");
+  }
+  if (body.linkedReservationId !== undefined) {
+    patch.linked_reservation_id = optionalUuid(body.linkedReservationId, "送迎予約ID");
+  }
+  if (body.summary !== undefined) {
+    patch.summary = requireString(body.summary, "問い合わせ内容", 1, 2000);
+  }
+  assertHasChanges(patch);
+  patch.updated_at = new Date().toISOString();
+
+  const params = new URLSearchParams();
+  params.set("id", `eq.${contactId}`);
+  params.set("facility_id", `eq.${session.facilityId}`);
+  params.set("updated_at", `eq.${expectedUpdatedAt}`);
+
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_contact_events?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: patch,
+      prefer: "return=representation",
+    }
+  );
+  const contact = Array.isArray(rows) ? rows[0] : null;
+  if (!contact) throw staleUpdateError();
+
+  await writeAuditLog(env, {
+    facilityId: session.facilityId,
+    actorType: session.actorType,
+    actorId: session.actorId,
+    action: "update_contact_hub_event",
+    entityType: "contact_event",
+    entityId: contactId,
+    requestId,
+    request,
+    newData: patch,
+  });
+
+  return successResponse(
+    { contact: publicContactEvent(contact) },
+    200,
+    corsOrigin,
+    requestId
+  );
 }
 
 function publicContactEvent(row) {
