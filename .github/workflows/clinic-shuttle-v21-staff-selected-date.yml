@@ -1,0 +1,50 @@
+name: CLINIC_SHUTTLE V2.1 Staff Selected Date
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-staff-selected-date.yml'
+      - '.github/workflows/clinic-shuttle-v21-staff-selected-date-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  staff-selected-date:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/workflows/clinic-shuttle-v21-staff-selected-date-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check staff.js
+          node --check shuttle.js
+          grep -q 'query.get("serviceDate")' staff.js
+          grep -q '選択日の担当便' staff.js
+          grep -q 'staff.html?serviceDate=' shuttle.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add staff.js shuttle.js
+          git commit -m "Carry selected date into staff operations"
+          git push
