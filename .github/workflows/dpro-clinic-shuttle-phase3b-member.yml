@@ -1,0 +1,46 @@
+name: DPRO Clinic Shuttle Phase 3B Member Reservation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dpro-clinic-shuttle-phase3b-member.yml"
+      - ".github/workflows/dpro-clinic-shuttle-phase3b-member.py"
+
+permissions:
+  contents: write
+
+jobs:
+  phase3b:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply Phase 3-B
+        run: python .github/workflows/dpro-clinic-shuttle-phase3b-member.py
+
+      - name: JavaScript syntax check
+        run: |
+          node --check worker.js
+          node --check member.js
+          node --check config.js
+
+      - name: Diff check
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Commit Phase 3-B
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO Factory Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add worker.js member.js member.css config.js CLINIC_SHUTTLE_BUILD_SPEC_V2_1.json PHASE3B_STATUS.txt
+          git commit -m "Implement clinic shuttle phase 3B member reservations"
+          git push
