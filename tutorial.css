@@ -213,6 +213,7 @@
   cursor: pointer;
 }
 
+.dpro-tutorial-launcher[hidden],
 .dpro-tutorial-card[hidden],
 .dpro-tutorial-target[hidden] { display: none !important; }
 
