@@ -1,0 +1,71 @@
+name: CLINIC_SHUTTLE V2.1 Phase 2 API
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-phase2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  phase2-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout CLINIC_SHUTTLE
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Phase 2 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f clinic_shuttle_phase2.py
+          python -m py_compile clinic_shuttle_phase2.py
+
+      - name: Apply Phase 2 Worker and API patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python clinic_shuttle_phase2.py
+          node --check worker.js
+          git diff --check
+
+      - name: Verify MASTER V2.1 guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'CLINIC-SHUTTLE-V2.1-DB-R2-20260920' worker.js
+          grep -q 'case "GET /v1/reservations":' worker.js
+          grep -q 'case "POST /v1/reservations":' worker.js
+          grep -q 'case "GET /v1/contact-hub":' worker.js
+          grep -q 'function requireThirtyMinuteTime' worker.js
+          grep -q 'explicitAllAvailable: true' worker.js
+          grep -q 'settings.schedule_step_minutes === 30' worker.js
+          grep -q '"schema_check_ok": true' SUPABASE_PHASE2_APPLIED.json
+          test ! -d __pycache__
+
+      - name: Commit Phase 2 result
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Build CLINIC_SHUTTLE V2.1 phase 2 API"
+          git push
+
+      - name: Show Phase 2 status
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat PHASE2_STATUS.txt
+          echo "HEAD=$(git rev-parse HEAD)"
