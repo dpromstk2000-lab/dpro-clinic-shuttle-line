@@ -5,6 +5,9 @@
   "main": "worker.js",
   "compatibility_date": "2026-09-20",
   "workers_dev": true,
+  "triggers": {
+    "crons": ["0 0 * * *"]
+  },
   "keep_vars": true,
   "vars": {
     "ALLOWED_ORIGINS": "https://dpromstk2000-lab.github.io",
@@ -13,7 +16,8 @@
     "DPRO_SYSTEM_CODE": "CLINIC_SHUTTLE",
     "SUPABASE_SCHEMA": "dpro_clinic_shuttle",
     "SUPABASE_URL": "https://cbknucemarcpbscirzyv.supabase.co",
-    "SESSION_TTL_SECONDS": "1800"
+    "SESSION_TTL_SECONDS": "1800",
+    "LINE_DELIVERY_MODE": "off_safe"
   },
   "observability": {
     "enabled": true

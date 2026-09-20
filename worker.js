@@ -11,7 +11,8 @@
  */
 
 const SERVICE_NAME = "DPRO Clinic Shuttle API";
-const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R4.1-20260920";
+const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R5-20260920";
+const PHASE3C_NOTIFICATION_DELIVERY_R1 = true;
 const PHASE3B_CANCEL_REASON_FIX_R1 = true;
 const PHASE3B_MEMBER_RESERVATION_R1 = true;
 const PHASE3_ADMIN_SURFACES_R1 = true;
@@ -109,7 +110,7 @@ export default {
               workerVersion: WORKER_VERSION,
               databaseSchema: SUPABASE_SCHEMA,
               requiredDatabaseVersion: DATABASE_VERSION,
-              apiStage: "CLINIC-SHUTTLE-V2.1-R3",
+              apiStage: "CLINIC-SHUTTLE-V2.1-R5",
             },
             200,
             corsOrigin,
@@ -433,6 +434,22 @@ export default {
         requestId
       );
     }
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(
+      runScheduledNotificationCycle(env).catch((error) => {
+        console.error(
+          JSON.stringify({
+            level: "error",
+            scope: "scheduled-notification-cycle",
+            code: error?.code || "NOTIFICATION_SCHEDULE_ERROR",
+            message: String(error?.message || error),
+            scheduledTime: event?.scheduledTime || null,
+          })
+        );
+      })
+    );
   },
 };
 
@@ -1439,6 +1456,7 @@ async function handleSystemCheck(
     phoneD,
     demoStatus,
     demoMemberStatus,
+    notificationRows,
   ] = await Promise.all([
     supabaseRpc(env, "shuttle_schema_check", {}),
     supabaseRequest(
@@ -1465,6 +1483,10 @@ async function handleSystemCheck(
     facility.environment === "demo"
       ? getDemoMemberStatus(env, facility.id)
       : Promise.resolve(null),
+    supabaseRequest(
+      env,
+      `shuttle_notifications?select=send_status&facility_id=eq.${facility.id}&order=created_at.desc&limit=500`
+    ),
   ]);
 
   const settings = Array.isArray(settingsRows)
@@ -1509,6 +1531,33 @@ const workerPhoneNormalizationOk = workerPhoneValues.every(
     typeof env.LINE_CHANNEL_ID === "string" &&
     /^[0-9]{5,20}$/.test(env.LINE_CHANNEL_ID);
   const rateLimitConfigured = Boolean(env.RATE_LIMITER);
+  const deliveryMode = notificationDeliveryMode(
+    env,
+    facility.environment
+  );
+  const notificationCounts = {
+    queued: 0,
+    sent: 0,
+    skipped: 0,
+    failed: 0,
+  };
+  for (const row of notificationRows || []) {
+    if (
+      Object.prototype.hasOwnProperty.call(
+        notificationCounts,
+        row.send_status
+      )
+    ) {
+      notificationCounts[row.send_status] += 1;
+    }
+  }
+  const notificationDeliveryStatus =
+    deliveryMode === "live" ||
+    deliveryMode === "live_demo"
+      ? "pass"
+      : facility.environment === "demo"
+        ? "pass"
+        : "pending";
   const demoDataOk =
     facility.environment !== "demo" ||
     (
@@ -1536,7 +1585,7 @@ const workerPhoneNormalizationOk = workerPhoneValues.every(
     {
       systemCheck: {
         ok: requiredOk,
-        stage: "CLINIC-SHUTTLE-V2.1-R2",
+        stage: "CLINIC-SHUTTLE-V2.1-R5",
         checkedAt: new Date().toISOString(),
         worker: {
           status: "pass",
@@ -1630,6 +1679,20 @@ phoneNormalization: {
           status: rateLimitConfigured ? "pass" : "recommended",
           bindingName: "RATE_LIMITER",
         },
+        notificationDelivery: {
+          status: notificationDeliveryStatus,
+          mode: deliveryMode,
+          lineAccessTokenConfigured:
+            lineAccessTokenConfigured(env),
+          previousDayCron: true,
+          eventNotifications: [
+            "departure",
+            "boarding",
+            "arrival",
+          ],
+          counts: notificationCounts,
+          channelFailureIsolation: true,
+        },
         operationalApi: {
           status: "pass",
           riderManagement: true,
@@ -1645,6 +1708,10 @@ phoneNormalization: {
           idempotencyKeys: true,
           demoPrepare: true,
           staffSessionRevocation: true,
+          notificationQueue: true,
+          notificationDispatch: true,
+          previousDayNotificationCron: true,
+          eventNotificationIsolation: true,
         },
       },
     },
@@ -4250,6 +4317,744 @@ async function handleRunStaffRemove(
   );
 }
 
+
+const NOTIFICATION_EVENT_CONFIG = Object.freeze({
+  en_route: {
+    type: "departure",
+    setting: "notify_departure",
+  },
+  boarded: {
+    type: "boarding",
+    setting: "notify_boarding",
+  },
+  arrived: {
+    type: "arrival",
+    setting: "notify_arrival",
+  },
+});
+
+function lineAccessTokenConfigured(env) {
+  return (
+    typeof env.LINE_CHANNEL_ACCESS_TOKEN === "string" &&
+    env.LINE_CHANNEL_ACCESS_TOKEN.trim().length >= 20
+  );
+}
+
+function notificationDeliveryMode(env, facilityEnvironment) {
+  const requested = String(
+    env.LINE_DELIVERY_MODE || "off_safe"
+  ).toLowerCase();
+
+  if (
+    requested === "live" &&
+    lineAccessTokenConfigured(env) &&
+    facilityEnvironment === "production"
+  ) {
+    return "live";
+  }
+
+  if (
+    requested === "live" &&
+    lineAccessTokenConfigured(env) &&
+    facilityEnvironment === "demo" &&
+    env.ALLOW_DEMO_LINE_DELIVERY === "enabled"
+  ) {
+    return "live_demo";
+  }
+
+  return "off_safe";
+}
+
+function guardianNotificationAllowed(preferences, notificationType) {
+  const prefs =
+    preferences &&
+    typeof preferences === "object" &&
+    !Array.isArray(preferences)
+      ? preferences
+      : {};
+  const keys = {
+    previous_day: ["previousDay", "previous_day"],
+    departure: ["departure"],
+    boarding: ["boarding"],
+    arrival: ["arrival"],
+  }[notificationType] || [];
+
+  for (const key of keys) {
+    if (
+      Object.prototype.hasOwnProperty.call(prefs, key) &&
+      prefs[key] === false
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function jstTomorrowDateString() {
+  return jstDateString(
+    new Date(Date.now() + 24 * 60 * 60 * 1000)
+  );
+}
+
+function notificationTimeLabel(value) {
+  if (!value) return "未定";
+  const raw = String(value);
+  const match = raw.match(/T(\d{2}):(\d{2})/);
+  if (match) return `${match[1]}:${match[2]}`;
+  const timeMatch = raw.match(/^(\d{2}):(\d{2})/);
+  if (timeMatch) return `${timeMatch[1]}:${timeMatch[2]}`;
+  return "未定";
+}
+
+function buildTransportNotificationMessage(
+  notificationType,
+  context
+) {
+  const riderName = String(
+    context.rider?.full_name || "ご利用者"
+  ).trim();
+  const serviceDate = context.run?.service_date || "";
+  const pickupTime = notificationTimeLabel(
+    context.stop?.planned_pickup_at
+  );
+  const dropoffTime = notificationTimeLabel(
+    context.stop?.planned_dropoff_at
+  );
+
+  if (notificationType === "previous_day") {
+    return [
+      "【DPRO 診療所送迎予約】",
+      `${riderName}さんの明日の送迎予定をご案内します。`,
+      serviceDate ? `送迎日：${serviceDate}` : null,
+      `乗車予定：${pickupTime}`,
+      `降車予定：${dropoffTime}`,
+      "変更・欠席がある場合は、ご家族用画面または診療所へご連絡ください。",
+    ].filter(Boolean).join("\\n");
+  }
+
+  if (notificationType === "departure") {
+    return [
+      "【DPRO 診療所送迎予約】",
+      `${riderName}さんのお迎えに向けて送迎車が出発しました。`,
+      `乗車予定：${pickupTime}`,
+    ].join("\\n");
+  }
+
+  if (notificationType === "boarding") {
+    return [
+      "【DPRO 診療所送迎予約】",
+      `${riderName}さんの乗車を確認しました。`,
+      `降車予定：${dropoffTime}`,
+    ].join("\\n");
+  }
+
+  if (notificationType === "arrival") {
+    return [
+      "【DPRO 診療所送迎予約】",
+      `${riderName}さんの到着を確認しました。`,
+    ].join("\\n");
+  }
+
+  return [
+    "【DPRO 診療所送迎予約】",
+    `${riderName}さんの送迎状況が更新されました。`,
+  ].join("\\n");
+}
+
+async function loadStopNotificationContext(
+  env,
+  facilityId,
+  stopId
+) {
+  const stopParams = new URLSearchParams();
+  stopParams.set(
+    "select",
+    "id,facility_id,run_id,rider_id,planned_pickup_at,planned_dropoff_at,stop_status"
+  );
+  stopParams.set("id", `eq.${stopId}`);
+  stopParams.set("facility_id", `eq.${facilityId}`);
+  stopParams.set("limit", "1");
+  const stopRows = await supabaseRequest(
+    env,
+    `shuttle_stops?${stopParams.toString()}`
+  );
+  const stop = Array.isArray(stopRows)
+    ? stopRows[0]
+    : null;
+  if (!stop) return null;
+
+  const runParams = new URLSearchParams();
+  runParams.set(
+    "select",
+    "id,service_date,service_type,route_group_code,run_status"
+  );
+  runParams.set("id", `eq.${stop.run_id}`);
+  runParams.set("facility_id", `eq.${facilityId}`);
+  runParams.set("limit", "1");
+
+  const riderParams = new URLSearchParams();
+  riderParams.set("select", "id,full_name");
+  riderParams.set("id", `eq.${stop.rider_id}`);
+  riderParams.set("facility_id", `eq.${facilityId}`);
+  riderParams.set("limit", "1");
+
+  const linkParams = new URLSearchParams();
+  linkParams.set(
+    "select",
+    "guardian_id,can_view_schedule,approved_at"
+  );
+  linkParams.set("facility_id", `eq.${facilityId}`);
+  linkParams.set("rider_id", `eq.${stop.rider_id}`);
+  linkParams.set("can_view_schedule", "eq.true");
+  linkParams.set("approved_at", "not.is.null");
+
+  const [runRows, riderRows, linkRows] = await Promise.all([
+    supabaseRequest(
+      env,
+      `shuttle_runs?${runParams.toString()}`
+    ),
+    supabaseRequest(
+      env,
+      `shuttle_riders?${riderParams.toString()}`
+    ),
+    supabaseRequest(
+      env,
+      `shuttle_guardian_rider_links?${linkParams.toString()}`
+    ),
+  ]);
+
+  const run = Array.isArray(runRows) ? runRows[0] : null;
+  const rider = Array.isArray(riderRows)
+    ? riderRows[0]
+    : null;
+  const guardianIds = [
+    ...new Set(
+      (linkRows || [])
+        .map((row) => row.guardian_id)
+        .filter(Boolean)
+    ),
+  ];
+
+  let guardians = [];
+  if (guardianIds.length) {
+    const guardianParams = new URLSearchParams();
+    guardianParams.set(
+      "select",
+      "id,full_name,line_user_id,link_status,notification_preferences,is_active,deleted_at"
+    );
+    guardianParams.set("facility_id", `eq.${facilityId}`);
+    guardianParams.set(
+      "id",
+      `in.(${guardianIds.join(",")})`
+    );
+    guardianParams.set("link_status", "eq.approved");
+    guardianParams.set("is_active", "eq.true");
+    guardianParams.set("deleted_at", "is.null");
+    guardians = await supabaseRequest(
+      env,
+      `shuttle_guardians?${guardianParams.toString()}`
+    );
+  }
+
+  return {
+    stop,
+    run,
+    rider,
+    guardians: Array.isArray(guardians) ? guardians : [],
+  };
+}
+
+async function patchNotificationDelivery(
+  env,
+  facilityId,
+  notificationId,
+  patch
+) {
+  const params = new URLSearchParams();
+  params.set("id", `eq.${notificationId}`);
+  params.set("facility_id", `eq.${facilityId}`);
+  await supabaseRequest(
+    env,
+    `shuttle_notifications?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: patch,
+      prefer: "return=minimal",
+    }
+  );
+}
+
+async function pushLineNotification(env, destination, messageText) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    UPSTREAM_TIMEOUT_MS
+  );
+
+  let response;
+  try {
+    response = await fetch(
+      "https://api.line.me/v2/bot/message/push",
+      {
+        method: "POST",
+        headers: {
+          authorization:
+            `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
+          "content-type": "application/json; charset=utf-8",
+          accept: "application/json",
+        },
+        body: JSON.stringify({
+          to: destination,
+          messages: [
+            {
+              type: "text",
+              text: String(messageText).slice(0, 5000),
+            },
+          ],
+        }),
+        signal: controller.signal,
+      }
+    );
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return {
+        ok: false,
+        code: "line_timeout",
+        providerMessageId: null,
+      };
+    }
+    return {
+      ok: false,
+      code: "line_unreachable",
+      providerMessageId: null,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const requestId =
+    response.headers.get("x-line-request-id") || null;
+  if (!response.ok) {
+    return {
+      ok: false,
+      code: `line_http_${response.status}`,
+      providerMessageId: requestId,
+    };
+  }
+  return {
+    ok: true,
+    code: null,
+    providerMessageId: requestId,
+  };
+}
+
+async function dispatchNotificationRecord(
+  env,
+  facility,
+  notification
+) {
+  if (!notification?.id) return "ignored";
+
+  if (!notification.destination_ref) {
+    await patchNotificationDelivery(
+      env,
+      facility.id,
+      notification.id,
+      {
+        send_status: "skipped",
+        error_code: "line_not_linked",
+      }
+    );
+    return "skipped";
+  }
+
+  const mode = notificationDeliveryMode(
+    env,
+    facility.environment
+  );
+  if (mode === "off_safe") {
+    await patchNotificationDelivery(
+      env,
+      facility.id,
+      notification.id,
+      {
+        send_status: "skipped",
+        error_code: "delivery_off_safe",
+      }
+    );
+    return "skipped";
+  }
+
+  const result = await pushLineNotification(
+    env,
+    notification.destination_ref,
+    notification.message_text
+  );
+
+  if (!result.ok) {
+    await patchNotificationDelivery(
+      env,
+      facility.id,
+      notification.id,
+      {
+        send_status: "failed",
+        error_code: result.code,
+        provider_message_id:
+          result.providerMessageId || null,
+      }
+    );
+    return "failed";
+  }
+
+  await patchNotificationDelivery(
+    env,
+    facility.id,
+    notification.id,
+    {
+      send_status: "sent",
+      provider_message_id:
+        result.providerMessageId || null,
+      error_code: null,
+      sent_at: new Date().toISOString(),
+    }
+  );
+  return "sent";
+}
+
+async function queueStopNotification(
+  env,
+  facility,
+  stopId,
+  notificationType
+) {
+  const context = await loadStopNotificationContext(
+    env,
+    facility.id,
+    stopId
+  );
+  if (!context?.stop || !context?.rider) {
+    return {
+      queued: 0,
+      dispatched: 0,
+      skipped: 0,
+      failed: 0,
+    };
+  }
+
+  const messageText = buildTransportNotificationMessage(
+    notificationType,
+    context
+  );
+  const summary = {
+    queued: 0,
+    dispatched: 0,
+    skipped: 0,
+    failed: 0,
+  };
+
+  for (const guardian of context.guardians) {
+    if (
+      !guardianNotificationAllowed(
+        guardian.notification_preferences,
+        notificationType
+      )
+    ) {
+      continue;
+    }
+
+    const idempotencyKey = [
+      "notify",
+      notificationType,
+      context.stop.id,
+      guardian.id,
+    ].join(":");
+
+    const query = new URLSearchParams();
+    query.set(
+      "on_conflict",
+      "facility_id,idempotency_key"
+    );
+    const rows = await supabaseRequest(
+      env,
+      `shuttle_notifications?${query.toString()}`,
+      {
+        method: "POST",
+        body: {
+          facility_id: facility.id,
+          rider_id: context.stop.rider_id,
+          guardian_id: guardian.id,
+          stop_id: context.stop.id,
+          notification_type: notificationType,
+          channel: "line",
+          destination_ref:
+            guardian.line_user_id || null,
+          message_text: messageText,
+          send_status: "queued",
+          idempotency_key: idempotencyKey,
+        },
+        prefer:
+          "resolution=ignore-duplicates,return=representation",
+      }
+    );
+
+    const notification = Array.isArray(rows)
+      ? rows[0]
+      : null;
+    if (!notification) {
+      continue;
+    }
+
+    summary.queued += 1;
+    const delivery = await dispatchNotificationRecord(
+      env,
+      facility,
+      notification
+    );
+    if (delivery === "sent") summary.dispatched += 1;
+    if (delivery === "skipped") summary.skipped += 1;
+    if (delivery === "failed") summary.failed += 1;
+  }
+
+  return summary;
+}
+
+async function safelyQueueRideEventNotification(
+  env,
+  facilityId,
+  stopId,
+  eventType
+) {
+  const rule = NOTIFICATION_EVENT_CONFIG[eventType];
+  if (!rule) return null;
+
+  try {
+    const settings = await loadFacilitySettings(
+      env,
+      facilityId
+    );
+    if (!settings?.[rule.setting]) {
+      return {
+        notificationType: rule.type,
+        enabled: false,
+      };
+    }
+    const facility = await findFacilityById(
+      env,
+      facilityId
+    );
+    const result = await queueStopNotification(
+      env,
+      facility,
+      stopId,
+      rule.type
+    );
+    return {
+      notificationType: rule.type,
+      enabled: true,
+      ...result,
+    };
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        scope: "ride-notification",
+        facilityId,
+        stopId,
+        eventType,
+        code: error?.code || "NOTIFICATION_ERROR",
+        message: String(error?.message || error),
+      })
+    );
+    return {
+      notificationType: rule.type,
+      enabled: true,
+      isolatedFailure: true,
+    };
+  }
+}
+
+async function dispatchQueuedNotifications(
+  env,
+  facility,
+  limit = 50
+) {
+  const params = new URLSearchParams();
+  params.set(
+    "select",
+    "id,facility_id,rider_id,guardian_id,stop_id,notification_type,channel,destination_ref,message_text,send_status,created_at"
+  );
+  params.set("facility_id", `eq.${facility.id}`);
+  params.set("send_status", "eq.queued");
+  params.set("order", "created_at.asc");
+  params.set("limit", String(limit));
+
+  const rows = await supabaseRequest(
+    env,
+    `shuttle_notifications?${params.toString()}`
+  );
+
+  const summary = {
+    checked: 0,
+    sent: 0,
+    skipped: 0,
+    failed: 0,
+  };
+  for (const notification of rows || []) {
+    summary.checked += 1;
+    const result = await dispatchNotificationRecord(
+      env,
+      facility,
+      notification
+    );
+    if (result === "sent") summary.sent += 1;
+    if (result === "skipped") summary.skipped += 1;
+    if (result === "failed") summary.failed += 1;
+  }
+  return summary;
+}
+
+async function queuePreviousDayNotificationsForFacility(
+  env,
+  facility,
+  serviceDate
+) {
+  const settings = await loadFacilitySettings(
+    env,
+    facility.id
+  );
+  if (!settings?.notify_previous_day) {
+    return {
+      enabled: false,
+      runs: 0,
+      stops: 0,
+    };
+  }
+
+  const runParams = new URLSearchParams();
+  runParams.set("select", "id");
+  runParams.set("facility_id", `eq.${facility.id}`);
+  runParams.set("service_date", `eq.${serviceDate}`);
+  runParams.set("run_status", "neq.cancelled");
+  runParams.set("limit", "500");
+  const runs = await supabaseRequest(
+    env,
+    `shuttle_runs?${runParams.toString()}`
+  );
+  const runIds = (runs || []).map((row) => row.id);
+
+  if (!runIds.length) {
+    return {
+      enabled: true,
+      runs: 0,
+      stops: 0,
+    };
+  }
+
+  const stopParams = new URLSearchParams();
+  stopParams.set("select", "id");
+  stopParams.set("facility_id", `eq.${facility.id}`);
+  stopParams.set(
+    "run_id",
+    `in.(${runIds.join(",")})`
+  );
+  stopParams.set("stop_status", "neq.cancelled");
+  stopParams.set("limit", "1000");
+  const stops = await supabaseRequest(
+    env,
+    `shuttle_stops?${stopParams.toString()}`
+  );
+
+  for (const stop of stops || []) {
+    await queueStopNotification(
+      env,
+      facility,
+      stop.id,
+      "previous_day"
+    );
+  }
+
+  return {
+    enabled: true,
+    runs: runIds.length,
+    stops: Array.isArray(stops) ? stops.length : 0,
+  };
+}
+
+async function runScheduledNotificationCycle(env) {
+  assertBaseConfiguration(env);
+  const serviceDate = jstTomorrowDateString();
+
+  const facilityParams = new URLSearchParams();
+  facilityParams.set(
+    "select",
+    "id,facility_code,facility_name,environment,timezone,is_active"
+  );
+  facilityParams.set("is_active", "eq.true");
+  facilityParams.set("limit", "200");
+  const facilities = await supabaseRequest(
+    env,
+    `shuttle_facilities?${facilityParams.toString()}`
+  );
+
+  const summary = {
+    serviceDate,
+    facilities: 0,
+    previousDayStops: 0,
+    pendingChecked: 0,
+    sent: 0,
+    skipped: 0,
+    failed: 0,
+  };
+
+  for (const facility of facilities || []) {
+    if (facility.environment !== env.APP_ENVIRONMENT) {
+      continue;
+    }
+    summary.facilities += 1;
+
+    try {
+      const queued =
+        await queuePreviousDayNotificationsForFacility(
+          env,
+          facility,
+          serviceDate
+        );
+      summary.previousDayStops += queued.stops || 0;
+
+      const dispatched =
+        await dispatchQueuedNotifications(
+          env,
+          facility,
+          100
+        );
+      summary.pendingChecked += dispatched.checked;
+      summary.sent += dispatched.sent;
+      summary.skipped += dispatched.skipped;
+      summary.failed += dispatched.failed;
+    } catch (error) {
+      summary.failed += 1;
+      console.error(
+        JSON.stringify({
+          level: "error",
+          scope: "facility-notification-cycle",
+          facilityId: facility.id,
+          code: error?.code || "NOTIFICATION_CYCLE_ERROR",
+          message: String(error?.message || error),
+        })
+      );
+    }
+  }
+
+  console.log(
+    JSON.stringify({
+      level: "info",
+      scope: "scheduled-notification-cycle",
+      ...summary,
+    })
+  );
+  return summary;
+}
+
 async function handleRideEvent(
   request,
   env,
@@ -4293,8 +5098,20 @@ async function handleRideEvent(
       p_notes: optionalString(body.notes, "備考", 1, 1000),
     }
   );
+
+  const notification =
+    await safelyQueueRideEventNotification(
+      env,
+      session.facilityId,
+      stopId,
+      eventType
+    );
+
   return successResponse(
-    { rideEvent: result },
+    {
+      rideEvent: result,
+      notification,
+    },
     200,
     corsOrigin,
     requestId

@@ -429,7 +429,8 @@
   (() => {
     "use strict";
 
-    const CHECK_VERSION = "SHUTTLE-10-R1-CHECK-20260729";
+    const CHECK_VERSION = "CLINIC-SHUTTLE-V2.1-R5-CHECK-20260920";
+    const PHASE3C_NOTIFICATION_CHECK = true;
     const SESSION_SUFFIX = "_system_check";
     const loginSection = document.getElementById("login-section");
     const checkSection = document.getElementById("check-section");
@@ -624,6 +625,19 @@
           check.lineMemberAuthentication?.configured
             ? "LINE Channel ID設定済み"
             : `${check.lineMemberAuthentication?.requiredAtStep || "本番導入前"}に設定`],
+        ["通知配送", check.notificationDelivery?.status,
+          detailList([
+            `モード ${check.notificationDelivery?.mode || "―"}`,
+            check.notificationDelivery?.lineAccessTokenConfigured
+              ? "LINE送信Secret設定済み"
+              : "LINE送信Secret未設定（safe-off）",
+            check.notificationDelivery?.counts
+              ? `送信 ${check.notificationDelivery.counts.sent || 0}／安全停止 ${check.notificationDelivery.counts.skipped || 0}／失敗 ${check.notificationDelivery.counts.failed || 0}`
+              : null,
+            check.notificationDelivery?.previousDayCron
+              ? "前日通知cron有効"
+              : null
+          ])],
         ["レート制限", check.rateLimiting?.status,
           check.rateLimiting?.status === "pass" ? "RATE_LIMITER設定済み" : "本番前に推奨"],
         ["運用API", check.operationalApi?.status,

@@ -1,0 +1,39 @@
+DPRO 診療所送迎予約 / PHASE 3-C NOTIFICATION DELIVERY
+
+IMPLEMENTED:
+- shuttle_notifications queue integration
+- departure notification hook
+- boarding notification hook
+- arrival notification hook
+- previous-day notification cron (09:00 JST)
+- guardian/rider link boundary
+- guardian notification preference opt-out
+- LINE Messaging API push adapter
+- LINE未接続時 safe skip
+- LINE送信Secret未設定時 off_safe
+- demo環境は既定で外部送信しない
+- notification idempotency
+- channel failure isolation:
+  通知失敗で乗降記録を失敗させない
+- System Check notification delivery row
+
+DELIVERY MODES:
+- demo default: off_safe
+- production without LINE_CHANNEL_ACCESS_TOKEN: off_safe
+- production + LINE_DELIVERY_MODE=live + secret: live
+- demo live delivery additionally requires
+  ALLOW_DEMO_LINE_DELIVERY=enabled
+
+EVENT SETTINGS:
+- notify_previous_day -> previous_day
+- notify_departure -> en_route
+- notify_boarding -> boarded
+- notify_arrival -> arrived
+
+NEXT:
+- runtime notification QA
+- final System Check
+- cross-role regression QA
+- final brushup
+- FINAL 4/4
+- FINAL LOCK
