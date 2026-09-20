@@ -2114,6 +2114,8 @@
           <div class="record-line"><span class="record-label">画面版</span><span class="record-value">${escapeHtml(config.version || "SHUTTLE-7")}</span></div>
         </div>`,
       footer: `
+        <a class="button button-secondary" href="owner.html?tutorial=replay">操作ガイドをもう一度見る</a>
+        <a class="button button-secondary" href="guide-center.html">ガイドセンター</a>
         <a class="button button-secondary" href="staff.html">現場スタッフ画面</a>
         <a class="button button-secondary" href="member.html?demo=1">家族デモ画面</a>
         <button type="button" class="button button-secondary" data-modal-close-button>閉じる</button>
