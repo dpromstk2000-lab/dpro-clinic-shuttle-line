@@ -1,0 +1,48 @@
+name: CLINIC_SHUTTLE V2.1 Delete Error Detail
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-delete-error-detail.yml'
+      - '.github/workflows/clinic-shuttle-v21-delete-error-detail-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  delete-error-detail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/workflows/clinic-shuttle-v21-delete-error-detail-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check worker.js
+          grep -q 'databaseCode === "23514"' worker.js
+          grep -q 'internalMessage ||' worker.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add worker.js
+          git commit -m "Show actionable database validation errors"
+          git push
