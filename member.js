@@ -168,10 +168,21 @@ function formatDate(value) {
 
 function formatTime(value) {
   if (!value) return "―";
-  const datetime = String(value).match(/T(\d{2}):(\d{2})/);
-  if (datetime) return `${datetime[1]}:${datetime[2]}`;
-  const time = String(value).match(/^(\d{2}):(\d{2})/);
-  return time ? `${time[1]}:${time[2]}` : "―";
+  const raw = String(value);
+
+  const time = raw.match(/^(\d{2}):(\d{2})/);
+  if (time) return `${time[1]}:${time[2]}`;
+
+  const date = new Date(raw);
+  if (!Number.isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(date);
+  }
+  return "―";
 }
 
 function changeSummary(changes = {}) {
@@ -224,14 +235,94 @@ function clearSession() {
   sessionStorage.removeItem(sessionStorageKey());
 }
 
+let memberSessionRefreshPromise = null;
+
+function tokenSecondsRemaining(token) {
+  try {
+    const payloadPart = String(token || "").split(".")[1];
+    if (!payloadPart) return 0;
+    const normalized = payloadPart
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const padded =
+      normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
+    return Number(payload.exp || 0) - Math.floor(Date.now() / 1000);
+  } catch {
+    return 0;
+  }
+}
+
+async function refreshMemberSessionIfNeeded(currentToken) {
+  const remaining = tokenSecondsRemaining(currentToken);
+  if (remaining <= 0 || remaining > 600) {
+    return currentToken;
+  }
+  if (memberSessionRefreshPromise) {
+    return memberSessionRefreshPromise;
+  }
+
+  const base = String(runtimeConfig.apiBaseUrl || "").replace(/\/+$/, "");
+  memberSessionRefreshPromise = (async () => {
+    const response = await fetch(`${base}/v1/auth/refresh`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${currentToken}`
+      },
+      body: "{}",
+      cache: "no-store"
+    });
+
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
+    }
+
+    if (!response.ok || payload.ok === false || !payload.token) {
+      throw new Error(
+        payload?.error?.message ||
+        "ログインの有効期限が切れました。もう一度ログインしてください。"
+      );
+    }
+
+    const current = loadSession();
+    if (current?.token === currentToken) {
+      current.token = payload.token;
+      sessionStorage.setItem(
+        sessionStorageKey(),
+        JSON.stringify(current)
+      );
+    }
+    return payload.token;
+  })().finally(() => {
+    memberSessionRefreshPromise = null;
+  });
+
+  return memberSessionRefreshPromise;
+}
+
 async function api(path, options = {}) {
   const base = String(runtimeConfig.apiBaseUrl || "").replace(/\/+$/, "");
   if (!base.startsWith("https://")) {
     throw new Error("API接続先が正しく設定されていません。");
   }
+
+  let requestToken = options.token || null;
+  if (requestToken && !path.startsWith("/v1/auth/")) {
+    try {
+      requestToken = await refreshMemberSessionIfNeeded(requestToken);
+    } catch {
+      // 本リクエストの401/403処理で再ログインへ案内する。
+    }
+  }
+
   const headers = new Headers({ Accept: "application/json" });
-  if (options.token) {
-    headers.set("Authorization", `Bearer ${options.token}`);
+  if (requestToken) {
+    headers.set("Authorization", `Bearer ${requestToken}`);
   }
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");
