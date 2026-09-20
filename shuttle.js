@@ -1724,7 +1724,7 @@
           <div><strong>定期予定を登録する前に準備が必要です。</strong><br>患者と、乗車場所・降車場所を登録してください。</div>
         </div>` : ""}
       <section class="split-grid">
-        <div class="panel">
+        <div class="panel schedule-list-panel">
           <header class="panel-header">
             <div>
               <h2 class="panel-title">曜日別予定</h2>

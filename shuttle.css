@@ -1062,10 +1062,24 @@ a {
 }
 
 
+.schedule-list-panel {
+  overflow: visible;
+}
+
+.schedule-list-panel > .panel-header {
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--surface);
+}
+
+.schedule-list-panel > .data-table-wrap {
+  overflow: hidden;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
 .weekday-index {
   position: sticky;
-  top: 0;
-  z-index: 8;
+  top: 78px;
+  z-index: 30;
   display: grid;
   grid-template-columns: repeat(8, minmax(64px, 1fr));
   gap: 8px;
@@ -1655,7 +1669,7 @@ body[data-layout="ipad"] .data-table td {
 
   .weekday-index {
     position: sticky;
-    top: 0;
+    top: 70px;
     display: flex;
     overflow-x: auto;
     padding: 9px 10px;
