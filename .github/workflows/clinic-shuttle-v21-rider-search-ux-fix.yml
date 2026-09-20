@@ -1,0 +1,50 @@
+name: CLINIC_SHUTTLE V2.1 Rider Search UX Fix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-rider-search-ux-fix.yml'
+      - '.github/workflows/clinic-shuttle-v21-rider-search-ux-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  rider-search-ux-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply rider search UX patch
+        run: python .github/workflows/clinic-shuttle-v21-rider-search-ux-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check shuttle.js
+          grep -q 'show-all-riders' shuttle.js
+          grep -q '?all=1&limit=100' shuttle.js
+          grep -q '患者を検索してください' shuttle.js
+          grep -q '該当する患者はいません' shuttle.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add shuttle.js
+          git commit -m "Fix explicit rider search and all-results UX"
+          git push
