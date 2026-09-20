@@ -6391,9 +6391,17 @@ function mapSupabaseError(status, payload) {
   }
   if (
     databaseCode === "22023" ||
-    databaseCode === "23514" ||
-    status === 400
+    databaseCode === "23514"
   ) {
+    return new AppError(
+      400,
+      "DATABASE_VALIDATION_FAILED",
+      internalMessage ||
+        "入力内容を確認してください。条件に合わない値が含まれています。",
+      internalMessage
+    );
+  }
+  if (status === 400) {
     return new AppError(
       400,
       "DATABASE_VALIDATION_FAILED",
