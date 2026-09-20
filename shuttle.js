@@ -190,10 +190,20 @@
 
   function formatTime(value) {
     if (!value) return "―";
-    const match = String(value).match(/T(\d{2}):(\d{2})/);
-    if (match) return `${match[1]}:${match[2]}`;
-    const timeMatch = String(value).match(/^(\d{2}):(\d{2})/);
-    return timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : "―";
+    const raw = String(value);
+    const timeMatch = raw.match(/^(\d{2}):(\d{2})/);
+    if (timeMatch) return `${timeMatch[1]}:${timeMatch[2]}`;
+
+    const date = new Date(raw);
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat("ja-JP", {
+        timeZone: "Asia/Tokyo",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      }).format(date);
+    }
+    return "―";
   }
 
   function normalizePhone(value) {
@@ -597,7 +607,7 @@
         role: path.endsWith("/staff") ? "dispatcher" : "admin",
         facility: {
           facilityCode: config.facilityCode,
-          facilityName: "デモ福祉送迎センター",
+          facilityName: "DPRO 診療所送迎予約 デモ診療所",
           environment: "demo"
         }
       });
@@ -744,7 +754,7 @@
           stage: "SHUTTLE-7",
           worker: { status: "pass", version: "SHUTTLE-7-WORKER-20260728" },
           database: { status: "pass", version: "SHUTTLE-1-DB-20260727", missingTables: [], missingRpcs: [], rlsDisabledTables: [], constraintCount: 155, indexCount: 65 },
-          facility: { status: "pass", facilityCode: config.facilityCode, environment: "demo", scheduleStepMinutes: 5, businessStartTime: "07:00:00", businessEndTime: "20:00:00" },
+          facility: { status: "pass", facilityCode: config.facilityCode, environment: "demo", scheduleStepMinutes: 30, businessStartTime: "07:00:00", businessEndTime: "20:00:00" },
           phoneNormalization: { status: "pass", normalizedValue: "09012345678" },
           productionGuard: { status: "pass" },
           demoData: {
@@ -795,7 +805,7 @@
             <span class="brand-mark" aria-hidden="true">▰</span>
             <div>
               <p class="brand-name"><strong>DPRO</strong></p>
-              <p class="brand-subtitle">診療所送迎予約 LINE</p>
+              <p class="brand-subtitle">診療所送迎予約</p>
             </div>
           </div>
           <div class="login-message">
@@ -960,7 +970,7 @@
             <span class="brand-mark" aria-hidden="true">▰</span>
             <div>
               <p class="sidebar-brand-name">DPRO</p>
-              <span class="sidebar-brand-sub">診療所送迎予約 LINE</span>
+              <span class="sidebar-brand-sub">診療所送迎予約</span>
             </div>
           </div>
           <nav class="sidebar-nav">
@@ -1264,7 +1274,7 @@
         </div>
         <div class="action-row">
           <button type="button" class="button" data-action="generate-runs" ${canOperate ? "" : 'disabled title="スタッフIDでログインしてください"'}>
-            <span aria-hidden="true">＋</span>本日の便を生成
+            <span aria-hidden="true">＋</span>選択日の便を生成
           </button>
         </div>
       </section>
@@ -1291,12 +1301,12 @@
       <section class="panel">
         <header class="panel-header">
           <div>
-            <h2 class="panel-title">本日の運行予定</h2>
+            <h2 class="panel-title">選択日の運行予定</h2>
             <p class="panel-subtitle">時間順に表示しています。状態は色と文字の両方で示します。</p>
           </div>
           <span class="status-badge status-active">${runs.length}便</span>
         </header>
-        ${runs.length ? renderRunsTable(runs) : emptyState("▰", "送迎便はまだありません", canOperate ? "「本日の便を生成」を押すと、定期予定から当日の便を重複なく作成します。" : "定期予定を登録後、スタッフIDでログインして当日の便を生成してください。", canOperate ? '<button type="button" class="button" data-action="generate-runs">本日の便を生成</button>' : '<button type="button" class="button button-secondary" data-action="show-section" data-section-target="schedules">定期予定を確認</button>')}
+        ${runs.length ? renderRunsTable(runs) : emptyState("▰", "送迎便はまだありません", canOperate ? "「選択日の便を生成」を押すと、定期予定から当日の便を重複なく作成します。" : "定期予定を登録後、スタッフIDでログインして当日の便を生成してください。", canOperate ? '<button type="button" class="button" data-action="generate-runs">選択日の便を生成</button>' : '<button type="button" class="button button-secondary" data-action="show-section" data-section-target="schedules">定期予定を確認</button>')}
       </section>`;
   }
 
