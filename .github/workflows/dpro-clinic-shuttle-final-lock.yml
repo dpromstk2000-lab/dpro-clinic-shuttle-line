@@ -1,0 +1,374 @@
+name: DPRO Clinic Shuttle FINAL 4/4 and FINAL LOCK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dpro-clinic-shuttle-final-lock.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-clinic-shuttle-final-lock
+  cancel-in-progress: false
+
+jobs:
+  final-lock:
+    runs-on: ubuntu-latest
+    env:
+      BASELINE_SHA: 283ef57ce60d8720cec8f52f8b954868b6d391c5
+      API_BASE: https://dpro-clinic-shuttle-line-api.dpromstk2000.workers.dev
+      PAGES_BASE: https://dpromstk2000-lab.github.io/dpro-clinic-shuttle-line
+      FACILITY_CODE: dpro_clinic_shuttle_demo
+      DEMO_LOGIN_ID: demo.dispatcher
+      DEMO_PIN: "5678"
+      EXPECTED_FRONTEND: CLINIC-SHUTTLE-V2.1-R6-20260920
+      EXPECTED_WORKER: CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920
+      EXPECTED_DB: CLINIC-SHUTTLE-V2.1-DB-R2-20260920
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard baseline and upload-only change
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          parent="$(git rev-parse HEAD^)"
+          if [ "$parent" != "$BASELINE_SHA" ]; then
+            echo "Unexpected parent HEAD: $parent"
+            echo "Expected baseline: $BASELINE_SHA"
+            exit 1
+          fi
+          changed="$(git diff --name-only HEAD^ HEAD)"
+          printf '%s\n' "$changed"
+          if [ "$changed" != ".github/workflows/dpro-clinic-shuttle-final-lock.yml" ]; then
+            echo "Upload commit contains files other than the final-lock workflow. Stop for drift review."
+            exit 1
+          fi
+
+      - name: Prepare evidence directory
+        shell: bash
+        run: mkdir -p .final4-evidence
+
+      - name: FINAL 1/4 - Build, versions, syntax, browser-secret guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check worker.js
+          node --check config.js
+          node --check member.js
+          node --check staff.js
+          node --check shuttle.js
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          spec = json.loads(Path("CLINIC_SHUTTLE_BUILD_SPEC_V2_1.json").read_text(encoding="utf-8"))
+          assert spec["identity"]["frontend_version"] == "CLINIC-SHUTTLE-V2.1-R6-20260920"
+          assert spec["identity"]["worker_version"] == "CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920"
+          # DB metadata is intentionally allowed to be R1 here; live DB is authoritative and is checked in FINAL 2/4.
+          assert spec["identity"]["database_version"] in {
+              "CLINIC-SHUTTLE-V2.1-DB-R1-20260920",
+              "CLINIC-SHUTTLE-V2.1-DB-R2-20260920",
+          }
+          PY
+          grep -F 'version: "CLINIC-SHUTTLE-V2.1-R6-20260920"' config.js
+          grep -F 'const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R6-20260920"' worker.js
+          grep -F 'const DATABASE_VERSION = "CLINIC-SHUTTLE-V2.1-DB-R2-20260920"' worker.js
+          grep -F 'const CHECK_VERSION = "CLINIC-SHUTTLE-V2.1-R6-CHECK-20260920"' system-check.html
+
+          # Browser-exposed files must not contain server-secret binding names.
+          if grep -R -n -E 'SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SECRET_KEY|SESSION_SECRET|ADMIN_ACCESS_CODE|DEMO_ADMIN_CODE|LINE_CHANNEL_ACCESS_TOKEN' \
+            -- config.js index.html owner.html staff.html member.html member.js staff.js shuttle.js portal.js system-check.html; then
+            echo "Server secret binding name found in browser-exposed file."
+            exit 1
+          fi
+
+      - name: FINAL 1/4 - Confirm live Pages R6
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in config.js member.js staff.js owner.html staff.html system-check.html; do
+            curl --retry 5 --retry-delay 2 --retry-all-errors -fsS \
+              "$PAGES_BASE/$f?final4=$GITHUB_RUN_ID" \
+              -o ".final4-evidence/live-$f"
+          done
+          curl --retry 5 --retry-delay 2 --retry-all-errors -fsS \
+            "$PAGES_BASE/member.html?demo=1&final4=$GITHUB_RUN_ID" \
+            -o .final4-evidence/live-member.html
+          grep -F "$EXPECTED_FRONTEND" .final4-evidence/live-config.js
+          grep -F 'CLINIC-SHUTTLE-V2.1-R6-CHECK-20260920' .final4-evidence/live-system-check.html
+
+      - name: FINAL 2/4 - Live Worker, DB, API and safety System Check
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --retry 5 --retry-delay 2 --retry-all-errors -fsS \
+            "$API_BASE/health" -o .final4-evidence/health.json
+          curl --retry 5 --retry-delay 2 --retry-all-errors -fsS \
+            "$API_BASE/v1/system/version" -o .final4-evidence/version.json
+          curl --retry 5 --retry-delay 2 --retry-all-errors -fsS \
+            -X POST "$API_BASE/v1/auth/staff" \
+            -H 'Content-Type: application/json' \
+            --data "{\"facilityCode\":\"$FACILITY_CODE\",\"loginId\":\"$DEMO_LOGIN_ID\",\"pin\":\"$DEMO_PIN\"}" \
+            -o .final4-evidence/login.json
+
+          TOKEN="$(python - <<'PY'
+          import json
+          p = json.load(open('.final4-evidence/login.json', encoding='utf-8'))
+          assert p.get('ok') is True, p
+          assert p.get('role') == 'dispatcher', p
+          print(p['token'])
+          PY
+          )"
+
+          curl --retry 5 --retry-delay 2 --retry-all-errors -fsS \
+            -X POST "$API_BASE/v1/system/check" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            -H "Idempotency-Key: final4-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --data '{}' \
+            -o .final4-evidence/system-check.json
+
+          # Token-bearing login response must never be committed or uploaded as evidence.
+          rm -f .final4-evidence/login.json
+
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          h = json.loads(Path('.final4-evidence/health.json').read_text(encoding='utf-8'))
+          v = json.loads(Path('.final4-evidence/version.json').read_text(encoding='utf-8'))
+          s = json.loads(Path('.final4-evidence/system-check.json').read_text(encoding='utf-8'))
+
+          assert h.get('ok') is True, h
+          assert h.get('version') == os.environ['EXPECTED_WORKER'], h
+          assert h.get('systemCode') == 'CLINIC_SHUTTLE', h
+
+          assert v.get('ok') is True, v
+          assert v.get('workerVersion') == os.environ['EXPECTED_WORKER'], v
+          assert v.get('requiredDatabaseVersion') == os.environ['EXPECTED_DB'], v
+          assert v.get('apiStage') == 'CLINIC-SHUTTLE-V2.1-R6', v
+
+          check = s.get('systemCheck') or {}
+          assert s.get('ok') is True, s
+          assert check.get('ok') is True, check
+          assert check.get('stage') == 'CLINIC-SHUTTLE-V2.1-R6', check
+          assert check.get('worker', {}).get('status') == 'pass', check.get('worker')
+          assert check.get('worker', {}).get('version') == os.environ['EXPECTED_WORKER'], check.get('worker')
+
+          db = check.get('database', {})
+          assert db.get('status') == 'pass', db
+          assert db.get('version') == os.environ['EXPECTED_DB'], db
+          assert db.get('requiredVersion') == os.environ['EXPECTED_DB'], db
+          assert not db.get('missingTables'), db
+          assert not db.get('missingRpcs'), db
+          assert not db.get('rlsDisabledTables'), db
+
+          facility = check.get('facility', {})
+          assert facility.get('status') == 'pass', facility
+          assert facility.get('scheduleStepMinutes') == 30, facility
+
+          assert check.get('phoneNormalization', {}).get('status') == 'pass', check.get('phoneNormalization')
+          assert check.get('productionGuard', {}).get('status') == 'pass', check.get('productionGuard')
+          assert check.get('demoData', {}).get('status') == 'pass', check.get('demoData')
+          assert check.get('demoData', {}).get('prepared') is True, check.get('demoData')
+          assert check.get('demoData', {}).get('memberLoginReady') is True, check.get('demoData')
+          assert check.get('browserCors', {}).get('status') == 'pass', check.get('browserCors')
+
+          notif = check.get('notificationDelivery', {})
+          counts = notif.get('counts') or {}
+          assert notif.get('status') == 'pass', notif
+          assert notif.get('mode') == 'off_safe', notif
+          assert int(counts.get('failed', 0)) == 0, counts
+          assert int(counts.get('queued', 0)) == 0, counts
+          assert notif.get('channelFailureIsolation') is True, notif
+          assert notif.get('previousDayCron') is True, notif
+
+          assert check.get('operationalApi', {}).get('status') == 'pass', check.get('operationalApi')
+          print('LIVE SYSTEM CHECK PASS')
+          PY
+
+      - name: FINAL 2/4 - Source safety invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'reservationSlotMinutes: 30' config.js
+          grep -F 'timeZone: "Asia/Tokyo"' system-check.html
+          grep -F 'zeroZero81Checked: true' worker.js
+          grep -F 'SCHEDULE_CONFLICT' worker.js
+          grep -F 'この車両は同じ時間帯の別便に割り当て済みです。' worker.js
+          grep -F 'このスタッフは同じ時間帯の別便に割り当て済みです。' worker.js
+          grep -F 'この患者は同じ時間帯の別便に予定があります。' worker.js
+          grep -F '過去日の変更依頼は送信できません。' member.js
+
+      - name: FINAL 3/4 - Role and UX regression gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F '<details class="member-card member-disclosure">' .final4-evidence/live-member.js
+          grep -F '<strong>送迎予約</strong>' .final4-evidence/live-member.js
+          grep -F '<strong>欠席・変更を連絡</strong>' .final4-evidence/live-member.js
+          grep -F '<h2>予約の状況</h2>' .final4-evidence/live-member.js
+          grep -F 'この日はすでに送迎予定があります。' .final4-evidence/live-member.js
+          grep -F '送りへ出発' .final4-evidence/live-staff.js
+          grep -F '<title' .final4-evidence/live-owner.html
+          grep -F '<title' .final4-evidence/live-staff.html
+          grep -F '<title' .final4-evidence/live-member.html
+
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('.final4-evidence/live-member.js').read_text(encoding='utf-8')
+          reserve = text.index('<strong>送迎予約</strong>')
+          reserve_close = text.index('</details>', reserve)
+          status = text.index('<h2>予約の状況</h2>', reserve)
+          assert reserve_close < status, 'Reservation status must remain outside the collapsed reservation form.'
+          change = text.index('<strong>欠席・変更を連絡</strong>')
+          change_close = text.index('</details>', change)
+          assert change_close > change, 'Change form details must close correctly.'
+          PY
+
+      - name: FINAL 4/4 - Release clean evidence and metadata precheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'FINAL System Check: PASS' FINAL_BRUSHUP_STATUS.txt
+          grep -F 'Cross-role regression QA: PASS' FINAL_BRUSHUP_STATUS.txt
+          grep -F 'Notification runtime QA: PASS' FINAL_BRUSHUP_STATUS.txt
+          grep -F 'Temporary TEST staff/vehicle/QA overlap run: none active.' FINAL_BRUSHUP_STATUS.txt
+          grep -F 'Historical completed/no-show run records retained.' FINAL_BRUSHUP_STATUS.txt
+          grep -F 'Temporary DEMO-G01 <-> DEMO-R03 notification link: removed.' FINAL_BRUSHUP_STATUS.txt
+          grep -F 'Database: CLINIC-SHUTTLE-V2.1-DB-R2-20260920' FINAL_BRUSHUP_STATUS.txt
+
+      - name: Write FINAL 4/4 result, synchronize metadata and create FINAL LOCK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone, timedelta
+          from pathlib import Path
+
+          JST = timezone(timedelta(hours=9))
+          now = datetime.now(JST).replace(microsecond=0).isoformat()
+          run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          source_head = os.environ['BASELINE_SHA']
+          expected_frontend = os.environ['EXPECTED_FRONTEND']
+          expected_worker = os.environ['EXPECTED_WORKER']
+          expected_db = os.environ['EXPECTED_DB']
+
+          system_check = json.loads(Path('.final4-evidence/system-check.json').read_text(encoding='utf-8'))
+          health = json.loads(Path('.final4-evidence/health.json').read_text(encoding='utf-8'))
+          version = json.loads(Path('.final4-evidence/version.json').read_text(encoding='utf-8'))
+
+          spec_path = Path('CLINIC_SHUTTLE_BUILD_SPEC_V2_1.json')
+          spec = json.loads(spec_path.read_text(encoding='utf-8'))
+          spec['generated_at'] = now
+          spec['identity']['database_version'] = expected_db
+          spec['current_stage'] = 'FINAL_LOCK'
+          phase3 = spec.setdefault('phase3', {})
+          phase3['pending'] = []
+          phase3['final_4_of_4'] = True
+          phase3['final_lock'] = True
+          phase3['final_lock_at'] = now
+          phase3['final_lock_source_head'] = source_head
+          phase3['final_lock_audit_run'] = run_url
+          spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          notif = (system_check.get('systemCheck') or {}).get('notificationDelivery') or {}
+          counts = notif.get('counts') or {}
+          result = f'''DPRO 診療所送迎予約 / FINAL 4/4 RESULT\n\nRESULT: PASS 4/4\nFINAL LOCK: APPROVED\nAUDITED_AT: {now}\nSOURCE_BASELINE_HEAD: {source_head}\nAUDIT_RUN: {run_url}\n\n[1/4] BUILD / DEPLOY: PASS\n- main baseline drift: none before finalizer upload\n- GitHub Pages: R6 live\n- Frontend: {expected_frontend}\n- Worker source syntax: PASS\n- Browser secret-binding exposure guard: PASS\n- Version alignment: PASS\n\n[2/4] DATA / API / SAFETY: PASS\n- Worker live: {expected_worker}\n- Database live: {expected_db}\n- DB schema check / RLS / missing table / missing RPC: PASS\n- CORS: PASS\n- production guard: PASS\n- 30-minute slots: PASS\n- phone normalization: PASS\n- resource conflict guards: PASS\n- notification mode: {notif.get('mode')}\n- notification failed: {counts.get('failed', 0)}\n- notification queued: {counts.get('queued', 0)}\n- operational API: PASS\n\n[3/4] ROLE / UX: PASS\n- Owner / Staff / Family public pages: reachable\n- Family reservation form: collapsed by default\n- Family change/cancel form: collapsed by default\n- Reservation status: remains visible outside collapsed form\n- Existing-transport additional-booking warning: present\n- Staff outbound wording: 送りへ出発\n- Vehicle / staff / rider conflict messages: specific\n\n[4/4] RELEASE / CLEAN: PASS\n- FINAL_BRUSHUP_STATUS: consistent\n- active temporary QA resource: none recorded after cleanup\n- historical completed/no-show records: retained\n- temporary DEMO-G01 <-> DEMO-R03 notification link: removed\n- BUILD_SPEC database_version: synchronized to {expected_db}\n- current_stage: FINAL_LOCK\n- pending: []\n\nNON-BLOCKING FOR STANDARD DEMO PRODUCT\n- LINE member authentication: production LIFF connection stage\n- RATE_LIMITER: recommended before production if System Check reports recommended\n'''
+          Path('FINAL_4_OF_4_RESULT.txt').write_text(result, encoding='utf-8')
+
+          lock = f'''DPRO 診療所送迎予約 / FINAL LOCK\n\nSTATUS: FINAL LOCK\nLOCKED_AT: {now}\nSYSTEM_CODE: CLINIC_SHUTTLE\nSOURCE_BASELINE_HEAD: {source_head}\nAUDIT_RUN: {run_url}\n\nLOCKED RELEASE\n- Frontend: {expected_frontend}\n- Worker: {expected_worker}\n- Database: {expected_db}\n- Supabase schema: dpro_clinic_shuttle\n- Demo facility: dpro_clinic_shuttle_demo\n\nFINAL RULE\n- 既にACCEPT/PASS済みの領域は、証明された不具合がない限り再開発しない。\n- 今後の修正はforward-onlyで行う。\n- FINAL LOCK後の変更は、変更理由・影響範囲・再QA証跡を必須とする。\n- 電子カルテ、診療記録、病名、検査結果、処方、レセプト、医療判断は製品境界外。\n- ドライバー表示は送迎に必要な最小情報のみ。\n\nCENTRAL RETURN: READY\n'''
+          Path('FINAL_LOCK.txt').write_text(lock, encoding='utf-8')
+
+          evidence = {
+              'created_at': now,
+              'system_code': 'CLINIC_SHUTTLE',
+              'source_baseline_head': source_head,
+              'audit_run': run_url,
+              'result': 'PASS_4_OF_4_FINAL_LOCK',
+              'versions': {
+                  'frontend': expected_frontend,
+                  'worker': expected_worker,
+                  'database': expected_db,
+              },
+              'health': {
+                  'ok': health.get('ok'),
+                  'systemCode': health.get('systemCode'),
+                  'version': health.get('version'),
+                  'status': health.get('status'),
+              },
+              'version_endpoint': {
+                  'ok': version.get('ok'),
+                  'workerVersion': version.get('workerVersion'),
+                  'requiredDatabaseVersion': version.get('requiredDatabaseVersion'),
+                  'apiStage': version.get('apiStage'),
+              },
+              'system_check': system_check.get('systemCheck'),
+              'pages': {
+                  'base': os.environ['PAGES_BASE'],
+                  'frontend_version_verified': expected_frontend,
+              },
+              'accepted_non_blockers': [
+                  'LINE member authentication is completed at production LIFF connection stage.',
+                  'RATE_LIMITER is recommended before production when reported as recommended.',
+              ],
+          }
+          Path('FINAL_RELEASE_EVIDENCE.json').write_text(
+              json.dumps(evidence, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Validate FINAL LOCK files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          spec = json.loads(Path('CLINIC_SHUTTLE_BUILD_SPEC_V2_1.json').read_text(encoding='utf-8'))
+          assert spec['identity']['database_version'] == 'CLINIC-SHUTTLE-V2.1-DB-R2-20260920'
+          assert spec['current_stage'] == 'FINAL_LOCK'
+          assert spec['phase3']['pending'] == []
+          assert spec['phase3']['final_4_of_4'] is True
+          assert spec['phase3']['final_lock'] is True
+          ev = json.loads(Path('FINAL_RELEASE_EVIDENCE.json').read_text(encoding='utf-8'))
+          assert ev['result'] == 'PASS_4_OF_4_FINAL_LOCK'
+          PY
+          git diff --check
+
+      - name: Commit FINAL LOCK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "DPRO Factory Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            CLINIC_SHUTTLE_BUILD_SPEC_V2_1.json \
+            FINAL_4_OF_4_RESULT.txt \
+            FINAL_LOCK.txt \
+            FINAL_RELEASE_EVIDENCE.json
+          git commit -m "FINAL LOCK DPRO clinic shuttle"
+          git push
+
+      - name: Upload audit evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dpro-clinic-shuttle-final4-evidence
+          path: |
+            .final4-evidence/health.json
+            .final4-evidence/version.json
+            .final4-evidence/system-check.json
+            .final4-evidence/live-config.js
+            .final4-evidence/live-member.js
+            .final4-evidence/live-staff.js
+            .final4-evidence/live-owner.html
+            .final4-evidence/live-staff.html
+            .final4-evidence/live-member.html
+            .final4-evidence/live-system-check.html
+          retention-days: 30
