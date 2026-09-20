@@ -1,0 +1,50 @@
+name: CLINIC_SHUTTLE V2.1 Weekday Index Sticky Fix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-weekday-index-sticky-fix.yml'
+      - '.github/workflows/clinic-shuttle-v21-weekday-index-sticky-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  weekday-index-sticky-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/workflows/clinic-shuttle-v21-weekday-index-sticky-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check shuttle.js
+          grep -q 'schedule-list-panel' shuttle.js
+          grep -q 'schedule-list-panel' shuttle.css
+          grep -q 'top: 78px' shuttle.css
+          grep -q 'top: 70px' shuttle.css
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add shuttle.js shuttle.css
+          git commit -m "Keep weekday index visible while scrolling"
+          git push
