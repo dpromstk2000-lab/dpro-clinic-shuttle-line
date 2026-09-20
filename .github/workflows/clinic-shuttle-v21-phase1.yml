@@ -1,0 +1,73 @@
+name: CLINIC_SHUTTLE V2.1 Phase 1 Separation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-phase1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  phase1-separation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout imported CLINIC_SHUTTLE repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify patch script exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f clinic_shuttle_phase1.py
+          python -m py_compile clinic_shuttle_phase1.py
+
+      - name: Apply MASTER V2.1 Phase 1 separation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python clinic_shuttle_phase1.py
+          git diff --check
+
+      - name: Verify no WELFARE runtime cross-talk remains
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'systemCode: "CLINIC_SHUTTLE"' config.js
+          grep -q 'databaseSchema: "dpro_clinic_shuttle"' config.js
+          grep -q '"name": "dpro-clinic-shuttle-line-api"' wrangler.jsonc
+          grep -q 'const SYSTEM_CODE = "CLINIC_SHUTTLE";' worker.js
+          grep -q 'const SUPABASE_SCHEMA = "dpro_clinic_shuttle";' worker.js
+          grep -q 'headers.set("accept-profile", SUPABASE_SCHEMA);' worker.js
+          test -f CLINIC_SHUTTLE_BUILD_SPEC_V2_1.json
+          test -f PHASE1_STATUS.txt
+          test -f reference/migrations/20260825_welfare_shuttle_r2.sql
+          test ! -f migrations/20260825_welfare_shuttle_r2.sql
+          test ! -f .github/workflows/product-ready-r2-remediation.yml
+          test ! -f .github/workflows/step-dpro-systems-4-shuttle-operation-demo.yml
+
+      - name: Commit Phase 1 result
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Build CLINIC_SHUTTLE V2.1 phase 1 separation"
+          git push
+
+      - name: Show final status
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat PHASE1_STATUS.txt
+          echo "HEAD=$(git rev-parse HEAD)"
