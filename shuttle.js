@@ -1866,11 +1866,23 @@
         const keyLabel = {
           reason: "理由",
           requestedTime: "希望時刻",
+          requestedPickupTime: "迎え希望",
+          requestedDropoffTime: "送り希望",
           note: "備考",
           locationName: "希望場所",
-          direction: "方向"
+          pickupLocationId: "迎え場所",
+          dropoffLocationId: "送り場所",
+          direction: "対象便"
         }[key] || key;
-        return `${keyLabel}：${typeof value === "object" ? safeJson(value) : value}`;
+        const display =
+          key === "direction"
+            ? {
+                pickup: "迎えのみ",
+                dropoff: "送りのみ",
+                both: "迎え・送り"
+              }[value] || value
+            : value;
+        return `${keyLabel}：${typeof display === "object" ? safeJson(display) : display}`;
       });
     return values.join("／") || "内容未入力";
   }

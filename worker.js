@@ -2122,33 +2122,6 @@ async function handleStaffUpdate(
   }
   assertHasChanges(changes);
 
-  if (
-    Object.prototype.hasOwnProperty.call(changes, "full_name") ||
-    Object.prototype.hasOwnProperty.call(changes, "phone")
-  ) {
-    const currentRider = await findRiderById(
-      env,
-      session.facilityId,
-      riderId
-    );
-    const nextFullName =
-      Object.prototype.hasOwnProperty.call(changes, "full_name")
-        ? changes.full_name
-        : currentRider.full_name;
-    const nextPhone =
-      Object.prototype.hasOwnProperty.call(changes, "phone")
-        ? changes.phone
-        : currentRider.phone;
-
-    await assertRiderNotDuplicated(
-      env,
-      session.facilityId,
-      nextFullName,
-      nextPhone,
-      riderId
-    );
-  }
-
   const params = new URLSearchParams();
   params.set("id", `eq.${staffId}`);
   params.set("facility_id", `eq.${session.facilityId}`);
@@ -2779,6 +2752,33 @@ async function handleRiderUpdate(
     changes.is_active = requireBoolean(body.isActive, "有効状態");
   }
   assertHasChanges(changes);
+
+  if (
+    Object.prototype.hasOwnProperty.call(changes, "full_name") ||
+    Object.prototype.hasOwnProperty.call(changes, "phone")
+  ) {
+    const currentRider = await findRiderById(
+      env,
+      session.facilityId,
+      riderId
+    );
+    const nextFullName =
+      Object.prototype.hasOwnProperty.call(changes, "full_name")
+        ? changes.full_name
+        : currentRider.full_name;
+    const nextPhone =
+      Object.prototype.hasOwnProperty.call(changes, "phone")
+        ? changes.phone
+        : currentRider.phone;
+
+    await assertRiderNotDuplicated(
+      env,
+      session.facilityId,
+      nextFullName,
+      nextPhone,
+      riderId
+    );
+  }
 
   const params = new URLSearchParams();
   params.set("id", `eq.${riderId}`);

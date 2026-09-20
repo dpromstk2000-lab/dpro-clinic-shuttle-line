@@ -683,7 +683,7 @@ function renderHomeData(app, session, data) {
     </section>
     <div class="member-summary-grid" aria-label="送迎概要">
       <div class="member-summary"><span>対象患者</span><strong>${riders.length}名</strong></div>
-      <div class="member-summary"><span>当日の送迎</span><strong>${Math.max(stops.length, schedules.length)}件</strong></div>
+      <div class="member-summary"><span>当日の送迎</span><strong>${stops.length ? stops.filter((stop) => stop.stopStatus !== "cancelled").length : schedules.length}件</strong></div>
       <div class="member-summary"><span>変更依頼</span><strong>${changes.length}件</strong></div>
     </div>
     <section class="member-card">
