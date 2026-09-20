@@ -1149,6 +1149,14 @@
       await logout();
     } else if (action === "open-rider-form") {
       openRiderForm();
+    } else if (action === "edit-rider") {
+      openRiderEditForm(actionButton.dataset.id);
+    } else if (action === "toggle-rider-status") {
+      await updateRiderActiveStatus(
+        actionButton.dataset.id,
+        actionButton.dataset.active === "true",
+        actionButton
+      );
     } else if (action === "open-guardian-form") {
       openGuardianForm();
     } else if (action === "approve-guardian-link") {
@@ -1522,6 +1530,7 @@
               <th scope="col">引渡し</th>
               <th scope="col">送迎上の注意</th>
               <th scope="col">状態</th>
+              <th scope="col"><span class="sr-only">操作</span></th>
             </tr>
           </thead>
           <tbody>
@@ -1537,6 +1546,18 @@
                 <td data-label="引渡し">${rider.requiresHandover ? "確認必須" : "通常"}</td>
                 <td data-label="送迎上の注意">${escapeHtml(rider.transportNotes || "―")}</td>
                 <td data-label="状態">${statusBadge(rider.isActive ? "active" : "inactive", { active: "利用中", inactive: "停止" })}</td>
+                <td data-label="操作">
+                  <div class="row-actions">
+                    <button type="button" class="row-button" data-action="edit-rider" data-id="${escapeHtml(rider.id)}">編集</button>
+                    <button
+                      type="button"
+                      class="row-button${rider.isActive ? " is-danger" : ""}"
+                      data-action="toggle-rider-status"
+                      data-id="${escapeHtml(rider.id)}"
+                      data-active="${rider.isActive ? "false" : "true"}"
+                    >${rider.isActive ? "停止" : "再開"}</button>
+                  </div>
+                </td>
               </tr>`).join("")}
           </tbody>
         </table>
@@ -2079,6 +2100,165 @@
     await loadRiders("", true);
     renderRiders();
     showToast(`${body.fullName}さんを登録しました。`);
+  }
+
+
+  function openRiderEditForm(riderId) {
+    const rider = (state.data.riders || []).find(
+      (item) => item.id === riderId
+    );
+    if (!rider) {
+      showToast("対象の患者情報が見つかりません。", "error");
+      return;
+    }
+
+    openModal({
+      title: "患者情報を編集",
+      wide: true,
+      body: `
+        <form id="rider-edit-form" novalidate>
+          <div class="form-grid">
+            <div class="field">
+              <label>患者番号</label>
+              <input value="${escapeHtml(rider.riderCode)}" disabled>
+              <p class="field-hint">患者番号は履歴保持のため変更しません。</p>
+            </div>
+            ${textField("fullName", "氏名", {
+              required: true,
+              autocomplete: "name",
+              maxlength: 100,
+              value: rider.fullName || ""
+            })}
+            ${textField("fullNameKana", "ふりがな", {
+              maxlength: 100,
+              value: rider.fullNameKana || ""
+            })}
+            ${textField("phone", "電話番号", {
+              inputmode: "tel",
+              autocomplete: "tel",
+              maxlength: 30,
+              value: rider.phone || ""
+            })}
+            <div class="field">
+              <label for="edit-transport-support-level">移動支援区分<span class="required-mark">必須</span></label>
+              <select id="edit-transport-support-level" name="transportSupportLevel" required>
+                ${Object.entries(labels.supportLevel).map(([value, label]) =>
+                  `<option value="${value}"${value === rider.transportSupportLevel ? " selected" : ""}>${escapeHtml(label)}</option>`
+                ).join("")}
+              </select>
+            </div>
+            ${textField("emergencyContactName", "緊急連絡先氏名", {
+              maxlength: 100,
+              value: rider.emergencyContactName || ""
+            })}
+            ${textField("emergencyContactPhone", "緊急連絡先電話番号", {
+              inputmode: "tel",
+              maxlength: 30,
+              value: rider.emergencyContactPhone || ""
+            })}
+            <div class="field is-full">
+              <span class="field-label">送迎時の確認</span>
+              <div class="segmented">
+                <label><input type="checkbox" name="usesWheelchair"${rider.usesWheelchair ? " checked" : ""}>車いすを利用</label>
+                <label><input type="checkbox" name="requiresHandover"${rider.requiresHandover ? " checked" : ""}>引渡し確認が必要</label>
+              </div>
+            </div>
+            <div class="field is-full">
+              <label for="edit-transport-notes">送迎上の注意</label>
+              <textarea id="edit-transport-notes" name="transportNotes" maxlength="1000">${escapeHtml(rider.transportNotes || "")}</textarea>
+              <p class="field-hint">診断名など、送迎業務に不要な医療情報は入力しないでください。</p>
+            </div>
+          </div>
+        </form>`,
+      footer: modalFormFooter("rider-edit-form", "更新する"),
+      onReady: (dialog) => {
+        bindModalForm(
+          dialog,
+          "rider-edit-form",
+          (form) => submitRiderEdit(form, rider)
+        );
+      }
+    });
+  }
+
+  async function submitRiderEdit(form, rider) {
+    const phone = formValue(form, "phone");
+    const emergencyPhone = formValue(form, "emergencyContactPhone");
+
+    if (phone && !isValidPhone(phone)) {
+      throw new Error("電話番号を正しく入力してください。");
+    }
+    if (emergencyPhone && !isValidPhone(emergencyPhone)) {
+      throw new Error("緊急連絡先電話番号を正しく入力してください。");
+    }
+
+    const body = {
+      expectedUpdatedAt: rider.updatedAt,
+      fullName: formValue(form, "fullName"),
+      fullNameKana: nullIfEmpty(formValue(form, "fullNameKana")),
+      phone: nullIfEmpty(phone),
+      transportSupportLevel: formValue(form, "transportSupportLevel"),
+      usesWheelchair: checked(form, "usesWheelchair"),
+      requiresHandover: checked(form, "requiresHandover"),
+      transportNotes: nullIfEmpty(formValue(form, "transportNotes")),
+      emergencyContactName: nullIfEmpty(formValue(form, "emergencyContactName")),
+      emergencyContactPhone: nullIfEmpty(emergencyPhone)
+    };
+
+    await api(`/v1/riders/${encodeURIComponent(rider.id)}`, {
+      method: "PATCH",
+      body
+    });
+
+    closeModal();
+    await loadRiders("", true);
+    renderRiders();
+    showToast(`${body.fullName}さんの情報を更新しました。`);
+  }
+
+  async function updateRiderActiveStatus(
+    riderId,
+    nextActive,
+    button
+  ) {
+    const rider = (state.data.riders || []).find(
+      (item) => item.id === riderId
+    );
+    if (!rider) {
+      showToast("対象の患者情報が見つかりません。", "error");
+      return;
+    }
+
+    const actionLabel = nextActive ? "利用を再開" : "利用を停止";
+    const historyMessage = nextActive
+      ? "過去の履歴はそのまま保持されます。"
+      : "過去の送迎履歴は削除せず保持します。";
+
+    if (
+      !window.confirm(
+        `${rider.fullName}さんの${actionLabel}します。\n${historyMessage}\n実行しますか？`
+      )
+    ) {
+      return;
+    }
+
+    setBusy(button, true, "処理中…");
+    try {
+      await api(`/v1/riders/${encodeURIComponent(rider.id)}`, {
+        method: "PATCH",
+        body: {
+          expectedUpdatedAt: rider.updatedAt,
+          isActive: nextActive
+        }
+      });
+      await loadRiders("", true);
+      renderRiders();
+      showToast(`${rider.fullName}さんの${actionLabel}しました。`);
+    } catch (error) {
+      showToast(friendlyError(error), "error");
+    } finally {
+      setBusy(button, false);
+    }
   }
 
   function openGuardianForm() {

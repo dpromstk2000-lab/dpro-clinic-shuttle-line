@@ -2122,6 +2122,33 @@ async function handleStaffUpdate(
   }
   assertHasChanges(changes);
 
+  if (
+    Object.prototype.hasOwnProperty.call(changes, "full_name") ||
+    Object.prototype.hasOwnProperty.call(changes, "phone")
+  ) {
+    const currentRider = await findRiderById(
+      env,
+      session.facilityId,
+      riderId
+    );
+    const nextFullName =
+      Object.prototype.hasOwnProperty.call(changes, "full_name")
+        ? changes.full_name
+        : currentRider.full_name;
+    const nextPhone =
+      Object.prototype.hasOwnProperty.call(changes, "phone")
+        ? changes.phone
+        : currentRider.phone;
+
+    await assertRiderNotDuplicated(
+      env,
+      session.facilityId,
+      nextFullName,
+      nextPhone,
+      riderId
+    );
+  }
+
   const params = new URLSearchParams();
   params.set("id", `eq.${staffId}`);
   params.set("facility_id", `eq.${session.facilityId}`);
@@ -5349,7 +5376,8 @@ async function assertRiderNotDuplicated(
   env,
   facilityId,
   fullName,
-  phone
+  phone,
+  excludeRiderId = null
 ) {
   if (!phone) {
     return;
@@ -5363,6 +5391,9 @@ async function assertRiderNotDuplicated(
     `eq.${normalizeJapanesePhone(phone)}`
   );
   params.set("is_active", "eq.true");
+  if (excludeRiderId) {
+    params.set("id", `neq.${excludeRiderId}`);
+  }
   params.set("limit", "1");
   const rows = await supabaseRequest(
     env,
