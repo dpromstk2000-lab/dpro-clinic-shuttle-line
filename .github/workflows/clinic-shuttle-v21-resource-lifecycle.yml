@@ -1,0 +1,56 @@
+name: CLINIC_SHUTTLE V2.1 Resource Lifecycle
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clinic-shuttle-v21-resource-lifecycle.yml'
+      - '.github/workflows/clinic-shuttle-v21-resource-lifecycle-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  resource-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/workflows/clinic-shuttle-v21-resource-lifecycle-patch.py
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check shuttle.js
+          grep -q 'data-action="edit-vehicle"' shuttle.js
+          grep -q 'data-action="toggle-vehicle-status"' shuttle.js
+          grep -q 'data-action="delete-vehicle"' shuttle.js
+          grep -q 'data-action="edit-staff"' shuttle.js
+          grep -q 'data-action="toggle-staff-status"' shuttle.js
+          grep -q 'data-action="delete-staff"' shuttle.js
+          grep -q 'function openVehicleEditForm' shuttle.js
+          grep -q 'function openStaffEditForm' shuttle.js
+          grep -q 'soft-delete' shuttle.js
+          grep -q 'resource-actions' shuttle.css
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "DPRO FACTORY"
+          git config user.email "actions@users.noreply.github.com"
+          git add shuttle.js shuttle.css
+          git commit -m "Add vehicle and staff lifecycle controls"
+          git push
