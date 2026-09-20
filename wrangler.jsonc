@@ -8,8 +8,11 @@
   "keep_vars": true,
   "vars": {
     "ALLOWED_ORIGINS": "https://dpromstk2000-lab.github.io",
+    "APP_ENVIRONMENT": "demo",
+    "PRODUCTION_GUARD": "enabled",
     "DPRO_SYSTEM_CODE": "CLINIC_SHUTTLE",
-    "SUPABASE_SCHEMA": "dpro_clinic_shuttle"
+    "SUPABASE_SCHEMA": "dpro_clinic_shuttle",
+    "SUPABASE_URL": "https://cbknucemarcpbscirzyv.supabase.co"
   },
   "observability": {
     "enabled": true
@@ -17,7 +20,8 @@
   "secrets": {
     "required": [
       "SUPABASE_SECRET_KEY",
-      "SESSION_SECRET"
+      "SESSION_SECRET",
+      "DEMO_ADMIN_CODE"
     ]
   }
 }
