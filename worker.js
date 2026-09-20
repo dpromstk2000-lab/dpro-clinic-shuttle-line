@@ -11,7 +11,8 @@
  */
 
 const SERVICE_NAME = "DPRO Clinic Shuttle API";
-const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R3-20260920";
+const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R4-20260920";
+const PHASE3B_MEMBER_RESERVATION_R1 = true;
 const PHASE3_ADMIN_SURFACES_R1 = true;
 const DATABASE_VERSION = "CLINIC-SHUTTLE-V2.1-DB-R2-20260920";
 const SYSTEM_CODE = "CLINIC_SHUTTLE";
@@ -1038,6 +1039,8 @@ async function handleMemberHome(
         riders: [],
         schedules: [],
         stops: [],
+        reservations: [],
+        reservationLocations: [],
         changeRequests: [],
       },
       200,
@@ -1067,6 +1070,87 @@ async function handleMemberHome(
   const linkByRiderId = new Map(
     links.map((row) => [row.rider_id, row])
   );
+
+  let reservationLocations = [];
+  let reservations = [];
+  if (allowedRiderIds.length > 0) {
+    const riderLocationParams = new URLSearchParams();
+    riderLocationParams.set(
+      "select",
+      "id,rider_id,location_type,location_name,is_default_pickup,is_default_dropoff,is_active"
+    );
+    riderLocationParams.set("facility_id", `eq.${session.facilityId}`);
+    riderLocationParams.set(
+      "rider_id",
+      `in.(${allowedRiderIds.join(",")})`
+    );
+    riderLocationParams.set("is_active", "eq.true");
+    riderLocationParams.set("order", "location_name.asc");
+
+    const facilityLocationParams = new URLSearchParams();
+    facilityLocationParams.set(
+      "select",
+      "id,rider_id,location_type,location_name,is_default_pickup,is_default_dropoff,is_active"
+    );
+    facilityLocationParams.set(
+      "facility_id",
+      `eq.${session.facilityId}`
+    );
+    facilityLocationParams.set("location_type", "eq.facility");
+    facilityLocationParams.set("is_active", "eq.true");
+    facilityLocationParams.set("order", "location_name.asc");
+
+    const reservationParams = new URLSearchParams();
+    reservationParams.set(
+      "select",
+      "id,rider_id,source_channel,service_date,appointment_time,trip_type,return_mode,outbound_requested_time,return_requested_time,pickup_location_id,clinic_location_id,return_dropoff_location_id,reservation_status,customer_note,version,cancel_requested_at,cancelled_at,created_at,updated_at"
+    );
+    reservationParams.set(
+      "facility_id",
+      `eq.${session.facilityId}`
+    );
+    reservationParams.set(
+      "rider_id",
+      `in.(${allowedRiderIds.join(",")})`
+    );
+    reservationParams.set("service_date", `eq.${serviceDate}`);
+    reservationParams.set("deleted_at", "is.null");
+    reservationParams.set(
+      "order",
+      "outbound_requested_time.asc,created_at.asc"
+    );
+
+    const [
+      riderLocationRows,
+      facilityLocationRows,
+      reservationRows,
+    ] = await Promise.all([
+      supabaseRequest(
+        env,
+        `shuttle_locations?${riderLocationParams.toString()}`
+      ),
+      supabaseRequest(
+        env,
+        `shuttle_locations?${facilityLocationParams.toString()}`
+      ),
+      supabaseRequest(
+        env,
+        `shuttle_reservations?${reservationParams.toString()}`
+      ),
+    ]);
+
+    const byLocationId = new Map();
+    for (const row of [
+      ...(riderLocationRows || []),
+      ...(facilityLocationRows || []),
+    ]) {
+      byLocationId.set(row.id, row);
+    }
+    reservationLocations = [...byLocationId.values()];
+    reservations = Array.isArray(reservationRows)
+      ? reservationRows
+      : [];
+  }
 
   let schedules = [];
   if (viewableRiderIds.length > 0) {
@@ -1198,6 +1282,10 @@ async function handleMemberHome(
           runById.get(row.run_id),
           locationById
         )
+      ),
+      reservations: reservations.map(publicMemberReservation),
+      reservationLocations: reservationLocations.map(
+        publicMemberReservationLocation
       ),
       changeRequests: (changeRows || []).map(
         publicMemberChangeRequest
@@ -4550,6 +4638,255 @@ function publicReservation(row) {
   };
 }
 
+
+function publicMemberReservation(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    riderId: row.rider_id,
+    sourceChannel: row.source_channel,
+    serviceDate: row.service_date,
+    appointmentTime: row.appointment_time ?? null,
+    tripType: row.trip_type,
+    returnMode: row.return_mode,
+    outboundRequestedTime: row.outbound_requested_time ?? null,
+    returnRequestedTime: row.return_requested_time ?? null,
+    pickupLocationId: row.pickup_location_id ?? null,
+    clinicLocationId: row.clinic_location_id ?? null,
+    returnDropoffLocationId: row.return_dropoff_location_id ?? null,
+    reservationStatus: row.reservation_status,
+    customerNote: row.customer_note ?? null,
+    version: row.version,
+    cancelRequestedAt: row.cancel_requested_at ?? null,
+    cancelledAt: row.cancelled_at ?? null,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function publicReservationForSession(row, session) {
+  return session?.role === "guardian"
+    ? publicMemberReservation(row)
+    : publicReservation(row);
+}
+
+function publicMemberReservationLocation(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    riderId: row.rider_id ?? null,
+    locationType: row.location_type,
+    locationName: row.location_name,
+    isDefaultPickup: Boolean(row.is_default_pickup),
+    isDefaultDropoff: Boolean(row.is_default_dropoff),
+  };
+}
+
+function assertNotPastReservationTime(serviceDate, timeValue, label) {
+  if (!timeValue) return;
+  const candidate = new Date(
+    `${serviceDate}T${String(timeValue).slice(0, 5)}:00+09:00`
+  );
+  if (!Number.isFinite(candidate.getTime())) {
+    throw new AppError(
+      400,
+      "INVALID_RESERVATION_TIME",
+      `${label}の日時形式が正しくありません。`
+    );
+  }
+  if (candidate.getTime() < Date.now()) {
+    throw new AppError(
+      400,
+      "PAST_RESERVATION_TIME",
+      `過去の${label}は指定できません。`
+    );
+  }
+}
+
+async function assertReservationRules(
+  env,
+  facilityId,
+  riderId,
+  {
+    serviceDate,
+    tripType,
+    returnMode,
+    outboundRequestedTime,
+    returnRequestedTime,
+    appointmentTime,
+    pickupLocationId,
+    clinicLocationId,
+    returnDropoffLocationId,
+  }
+) {
+  if (
+    ["outbound_to_clinic", "round_trip"].includes(tripType) &&
+    !pickupLocationId
+  ) {
+    throw new AppError(
+      400,
+      "PICKUP_LOCATION_REQUIRED",
+      "行きの送迎にはお迎え場所を選択してください。"
+    );
+  }
+  if (!clinicLocationId) {
+    throw new AppError(
+      400,
+      "CLINIC_LOCATION_REQUIRED",
+      "診療所を選択してください。"
+    );
+  }
+  if (
+    ["round_trip", "return_only"].includes(tripType) &&
+    !returnDropoffLocationId
+  ) {
+    throw new AppError(
+      400,
+      "RETURN_DROPOFF_REQUIRED",
+      "帰りの送迎には降車場所を選択してください。"
+    );
+  }
+
+  const settingsParams = new URLSearchParams();
+  settingsParams.set(
+    "select",
+    "schedule_step_minutes,business_start_time,business_end_time"
+  );
+  settingsParams.set("facility_id", `eq.${facilityId}`);
+  settingsParams.set("limit", "1");
+  const settingsRows = await supabaseRequest(
+    env,
+    `shuttle_settings?${settingsParams.toString()}`
+  );
+  const settings = Array.isArray(settingsRows)
+    ? settingsRows[0]
+    : null;
+  if (!settings) {
+    throw new AppError(
+      503,
+      "FACILITY_SETTINGS_MISSING",
+      "診療所の送迎時間設定が見つかりません。"
+    );
+  }
+
+  const startMinutes = timeToMinutes(settings.business_start_time);
+  const endMinutes = timeToMinutes(settings.business_end_time);
+  const step = Number(settings.schedule_step_minutes || 30);
+
+  for (const [label, value] of [
+    ["行き希望時間", outboundRequestedTime],
+    ["帰り希望時間", returnRequestedTime],
+    ["受診予定時刻", appointmentTime],
+  ]) {
+    if (!value) continue;
+    const minutes = timeToMinutes(value);
+    if (
+      !Number.isFinite(minutes) ||
+      minutes < startMinutes ||
+      minutes > endMinutes
+    ) {
+      throw new AppError(
+        400,
+        "OUTSIDE_BUSINESS_HOURS",
+        `${label}は診療所の運行時間内で選択してください。`
+      );
+    }
+    if (minutes % step !== 0) {
+      throw new AppError(
+        400,
+        "INVALID_TIME_STEP",
+        `${label}は${step}分単位で選択してください。`
+      );
+    }
+    assertNotPastReservationTime(serviceDate, value, label);
+  }
+
+  if (
+    tripType === "round_trip" &&
+    returnMode === "fixed_time" &&
+    returnRequestedTime &&
+    outboundRequestedTime &&
+    timeToMinutes(returnRequestedTime) <=
+      timeToMinutes(outboundRequestedTime)
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_RETURN_TIME",
+      "帰り希望時間は行き希望時間より後にしてください。"
+    );
+  }
+
+  const locationIds = [
+    pickupLocationId,
+    clinicLocationId,
+    returnDropoffLocationId,
+  ].filter(Boolean);
+  const rows = await fetchRowsByIds(
+    env,
+    "shuttle_locations",
+    facilityId,
+    [...new Set(locationIds)],
+    "id,rider_id,location_type,is_active"
+  );
+  const locationById = new Map(rows.map((row) => [row.id, row]));
+
+  const assertActiveLocation = (locationId, label) => {
+    if (!locationId) return null;
+    const location = locationById.get(locationId);
+    if (!location || !location.is_active) {
+      throw new AppError(
+        400,
+        "RESERVATION_LOCATION_INVALID",
+        `${label}が利用できません。場所を選び直してください。`
+      );
+    }
+    return location;
+  };
+
+  const pickup = assertActiveLocation(
+    pickupLocationId,
+    "お迎え場所"
+  );
+  const clinic = assertActiveLocation(
+    clinicLocationId,
+    "診療所"
+  );
+  const returnDropoff = assertActiveLocation(
+    returnDropoffLocationId,
+    "帰り降車場所"
+  );
+
+  if (
+    pickup &&
+    pickup.location_type !== "facility" &&
+    pickup.rider_id !== riderId
+  ) {
+    throw new AppError(
+      403,
+      "RESERVATION_LOCATION_ACCESS_DENIED",
+      "この患者のお迎え場所ではありません。"
+    );
+  }
+  if (clinic && clinic.location_type !== "facility") {
+    throw new AppError(
+      400,
+      "CLINIC_LOCATION_INVALID",
+      "診療所として登録された場所を選択してください。"
+    );
+  }
+  if (
+    returnDropoff &&
+    returnDropoff.location_type !== "facility" &&
+    returnDropoff.rider_id !== riderId
+  ) {
+    throw new AppError(
+      403,
+      "RESERVATION_LOCATION_ACCESS_DENIED",
+      "この患者の帰り降車場所ではありません。"
+    );
+  }
+}
+
 function validateReservationTripFields({
   tripType,
   returnMode,
@@ -4656,7 +4993,7 @@ async function handleReservationList(request, env, corsOrigin, requestId) {
 
   const rows = await supabaseRequest(env, `shuttle_reservations?${params.toString()}`);
   return successResponse(
-    { reservations: (rows || []).map(publicReservation), count: Array.isArray(rows) ? rows.length : 0 },
+    { reservations: (rows || []).map((row) => publicReservationForSession(row, session)), count: Array.isArray(rows) ? rows.length : 0 },
     200, corsOrigin, requestId
   );
 }
@@ -4692,6 +5029,36 @@ async function handleReservationCreate(request, env, corsOrigin, requestId) {
     tripType, returnMode, outboundRequestedTime, returnRequestedTime,
   });
 
+  const pickupLocationId = optionalUuid(
+    body.pickupLocationId,
+    "お迎え場所ID"
+  );
+  const clinicLocationId = optionalUuid(
+    body.clinicLocationId,
+    "診療所場所ID"
+  );
+  const returnDropoffLocationId = optionalUuid(
+    body.returnDropoffLocationId,
+    "帰り降車場所ID"
+  );
+
+  await assertReservationRules(
+    env,
+    session.facilityId,
+    riderId,
+    {
+      serviceDate,
+      tripType,
+      returnMode,
+      outboundRequestedTime,
+      returnRequestedTime,
+      appointmentTime,
+      pickupLocationId,
+      clinicLocationId,
+      returnDropoffLocationId,
+    }
+  );
+
   if (session.role === "guardian") {
     await assertGuardianCanChangeRider(env, session.facilityId, session.actorId, riderId);
   }
@@ -4720,9 +5087,9 @@ async function handleReservationCreate(request, env, corsOrigin, requestId) {
     return_mode: returnMode,
     outbound_requested_time: outboundRequestedTime,
     return_requested_time: returnRequestedTime,
-    pickup_location_id: optionalUuid(body.pickupLocationId, "お迎え場所ID"),
-    clinic_location_id: optionalUuid(body.clinicLocationId, "診療所場所ID"),
-    return_dropoff_location_id: optionalUuid(body.returnDropoffLocationId, "帰り降車場所ID"),
+    pickup_location_id: pickupLocationId,
+    clinic_location_id: clinicLocationId,
+    return_dropoff_location_id: returnDropoffLocationId,
     reservation_status: "pending",
     customer_note: optionalString(body.customerNote, "連絡事項", 1, 1000),
     internal_note: session.role === "guardian"
@@ -4748,7 +5115,7 @@ async function handleReservationCreate(request, env, corsOrigin, requestId) {
         requestId, request,
         newData: { serviceDate, tripType, sourceChannel, reservationStatus: "pending" },
       });
-      return { status: 201, payload: { reservation: publicReservation(reservation) } };
+      return { status: 201, payload: { reservation: publicReservationForSession(reservation, session) } };
     }
   );
 }
@@ -4815,6 +5182,41 @@ async function handleReservationUpdate(request, env, corsOrigin, requestId, rese
         ? changes.return_requested_time : current.return_requested_time,
   });
 
+  await assertReservationRules(
+    env,
+    session.facilityId,
+    current.rider_id,
+    {
+      serviceDate: changes.service_date ?? current.service_date,
+      tripType: changes.trip_type ?? current.trip_type,
+      returnMode: changes.return_mode ?? current.return_mode,
+      outboundRequestedTime:
+        Object.prototype.hasOwnProperty.call(changes, "outbound_requested_time")
+          ? changes.outbound_requested_time
+          : current.outbound_requested_time,
+      returnRequestedTime:
+        Object.prototype.hasOwnProperty.call(changes, "return_requested_time")
+          ? changes.return_requested_time
+          : current.return_requested_time,
+      appointmentTime:
+        Object.prototype.hasOwnProperty.call(changes, "appointment_time")
+          ? changes.appointment_time
+          : current.appointment_time,
+      pickupLocationId:
+        Object.prototype.hasOwnProperty.call(changes, "pickup_location_id")
+          ? changes.pickup_location_id
+          : current.pickup_location_id,
+      clinicLocationId:
+        Object.prototype.hasOwnProperty.call(changes, "clinic_location_id")
+          ? changes.clinic_location_id
+          : current.clinic_location_id,
+      returnDropoffLocationId:
+        Object.prototype.hasOwnProperty.call(changes, "return_dropoff_location_id")
+          ? changes.return_dropoff_location_id
+          : current.return_dropoff_location_id,
+    }
+  );
+
   const params = new URLSearchParams();
   params.set("id", `eq.${reservationId}`);
   params.set("facility_id", `eq.${session.facilityId}`);
@@ -4835,7 +5237,7 @@ async function handleReservationUpdate(request, env, corsOrigin, requestId, rese
     entityId: reservationId,
     requestId, request,
   });
-  return successResponse({ reservation: publicReservation(reservation) }, 200, corsOrigin, requestId);
+  return successResponse({ reservation: publicReservationForSession(reservation, session) }, 200, corsOrigin, requestId);
 }
 
 async function handleReservationCancel(request, env, corsOrigin, requestId, reservationId) {
@@ -4886,7 +5288,7 @@ async function handleReservationCancel(request, env, corsOrigin, requestId, rese
     entityId: reservationId,
     requestId, request,
   });
-  return successResponse({ reservation: publicReservation(reservation) }, 200, corsOrigin, requestId);
+  return successResponse({ reservation: publicReservationForSession(reservation, session) }, 200, corsOrigin, requestId);
 }
 
 async function handleReservationReturnReady(request, env, corsOrigin, requestId, reservationId) {
@@ -4924,7 +5326,7 @@ async function handleReservationReturnReady(request, env, corsOrigin, requestId,
     entityId: reservationId,
     requestId, request,
   });
-  return successResponse({ reservation: publicReservation(reservation) }, 200, corsOrigin, requestId);
+  return successResponse({ reservation: publicReservationForSession(reservation, session) }, 200, corsOrigin, requestId);
 }
 
 async function handleStaffSoftDelete(request, env, corsOrigin, requestId, staffId) {

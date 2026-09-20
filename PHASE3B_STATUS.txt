@@ -1,0 +1,22 @@
+DPRO 診療所送迎予約 / PHASE 3-B STATUS
+
+IMPLEMENTED:
+- 家族/LINE側 新規送迎予約UI
+- 行きのみ / 往復 / 帰りのみ
+- 診療終了後に帰り便手配
+- 30分単位
+- 過去日・過去時刻ガード
+- 患者に紐づく乗降場所のみ利用
+- 診療所場所のテナント境界確認
+- 家族側予約一覧
+- 家族側取消依頼
+- 家族APIで内部メモを返さない
+- Worker / Frontend version R4
+
+PENDING:
+- PHASE 3-B runtime QA
+- 通知配送連動
+- System Check final
+- 横断回帰QA
+- FINAL 4/4
+- FINAL LOCK

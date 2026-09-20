@@ -432,7 +432,7 @@ a {
 
 .member-summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 18px;
 }
@@ -630,4 +630,14 @@ a {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+
+/* PHASE3B_MEMBER_UI_R1 */
+.member-record .member-actions {
+  margin-top: 12px;
+}
+.member-record .member-actions .member-button {
+  min-height: 44px;
+  padding-block: 8px;
 }

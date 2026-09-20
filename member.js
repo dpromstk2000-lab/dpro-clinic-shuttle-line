@@ -1,3 +1,5 @@
+const PHASE3B_MEMBER_UI_R1 = true;
+
 const runtimeConfig =
   typeof window !== "undefined"
     ? window.DPRO_SHUTTLE_CONFIG || {}
@@ -34,6 +36,35 @@ const serviceTypeLabels = Object.freeze({
   dropoff: "送り",
   transfer: "施設間移送"
 });
+
+const reservationStatusLabels = Object.freeze({
+  pending: "確認待ち",
+  confirmed: "予約確認済み",
+  assigned: "配車済み",
+  outbound_in_progress: "行き運行中",
+  at_clinic: "診療所到着",
+  return_ready: "帰り便待ち",
+  return_assigned: "帰り配車済み",
+  return_in_progress: "帰り運行中",
+  completed: "完了",
+  change_requested: "変更依頼中",
+  cancel_requested: "取消確認待ち",
+  cancelled: "取消",
+  rejected: "却下"
+});
+
+const reservationTripTypeLabels = Object.freeze({
+  outbound_to_clinic: "行きのみ",
+  round_trip: "往復",
+  return_only: "帰りのみ"
+});
+
+const reservationReturnModeLabels = Object.freeze({
+  none: "帰りなし",
+  fixed_time: "時間指定",
+  after_visit_ready: "診療終了後に手配"
+});
+
 
 export function jstDateString(date = new Date()) {
   return new Intl.DateTimeFormat("sv-SE", {
@@ -131,6 +162,13 @@ export function statusTone(status) {
     [
       "pending",
       "confirmed",
+      "assigned",
+      "outbound_in_progress",
+      "at_clinic",
+      "return_ready",
+      "return_assigned",
+      "return_in_progress",
+      "change_requested",
       "en_route",
       "boarded",
       "planned"
@@ -139,7 +177,7 @@ export function statusTone(status) {
     return "is-progress";
   }
   if (
-    ["rejected", "cancelled", "no_show"].includes(status)
+    ["rejected", "cancelled", "cancel_requested", "no_show"].includes(status)
   ) {
     return "is-danger";
   }
@@ -652,6 +690,8 @@ function renderHomeData(app, session, data) {
   const riders = data.riders || [];
   const schedules = data.schedules || [];
   const stops = data.stops || [];
+  const reservations = data.reservations || [];
+  const reservationLocations = data.reservationLocations || [];
   const changes = data.changeRequests || [];
   const stopsByRider = new Map();
   for (const stop of stops) {
@@ -684,6 +724,7 @@ function renderHomeData(app, session, data) {
     <div class="member-summary-grid" aria-label="送迎概要">
       <div class="member-summary"><span>対象患者</span><strong>${riders.length}名</strong></div>
       <div class="member-summary"><span>当日の送迎</span><strong>${stops.length ? stops.filter((stop) => stop.stopStatus !== "cancelled").length : schedules.length}件</strong></div>
+      <div class="member-summary"><span>送迎予約</span><strong>${reservations.length}件</strong></div>
       <div class="member-summary"><span>変更依頼</span><strong>${changes.length}件</strong></div>
     </div>
     <section class="member-card">
@@ -707,6 +748,14 @@ function renderHomeData(app, session, data) {
           </div>` : '<div class="member-empty"><strong>閲覧できる患者がいません</strong><p>患者との紐づけを診療所へご確認ください。</p></div>'}
       </div>
     </section>
+    ${(reservations.length || riders.some((rider) => rider.canRequestChange))
+      ? renderReservationSection(
+          riders,
+          data.serviceDate,
+          reservations,
+          reservationLocations
+        )
+      : ""}
     ${riders.some((rider) => rider.canRequestChange) ? renderChangeForm(riders, data.serviceDate) : ""}
     <section class="member-card">
       <header class="member-card-header">
@@ -736,7 +785,7 @@ function renderHomeData(app, session, data) {
         renderHome(app, session, event.target.value);
       }
     });
-  bindHomeActions(app, session, data.serviceDate);
+  bindHomeActions(app, session, data.serviceDate, data);
 }
 
 function renderStopRecord(stop) {
@@ -772,6 +821,397 @@ function renderThirtyMinuteTimeOptions() {
     }
   }
   return options.join("");
+}
+
+
+function currentJstMinutes() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function reservationTimeOptions(serviceDate, selected = "") {
+  const today = jstDateString();
+  const nowMinutes = currentJstMinutes();
+  const options = ['<option value="">選択してください</option>'];
+  for (let hour = 0; hour < 24; hour += 1) {
+    for (const minute of [0, 30]) {
+      const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      const total = hour * 60 + minute;
+      const disabled = serviceDate === today && total < nowMinutes;
+      options.push(
+        `<option value="${value}"${selected === value ? " selected" : ""}${disabled ? " disabled" : ""}>${value}</option>`
+      );
+    }
+  }
+  return options.join("");
+}
+
+function reservationLocationOptions(locations, kind) {
+  const filtered = locations.filter((location) =>
+    kind === "clinic"
+      ? location.locationType === "facility"
+      : true
+  );
+  return `
+    <option value="">選択してください</option>
+    ${filtered.map((location) => `
+      <option
+        value="${escapeHtml(location.id)}"
+        data-rider-id="${escapeHtml(location.riderId || "")}"
+        data-location-type="${escapeHtml(location.locationType || "")}"
+        data-default-pickup="${location.isDefaultPickup ? "1" : "0"}"
+        data-default-dropoff="${location.isDefaultDropoff ? "1" : "0"}"
+      >${escapeHtml(location.locationName)}${location.locationType === "facility" ? "（診療所）" : ""}</option>`).join("")}`;
+}
+
+function renderReservationSection(
+  riders,
+  serviceDate,
+  reservations,
+  reservationLocations
+) {
+  const allowed = riders.filter((rider) => rider.canRequestChange);
+  const today = jstDateString();
+  const reservationDate = isPastJstDate(serviceDate)
+    ? today
+    : serviceDate;
+  const riderById = new Map(riders.map((rider) => [rider.id, rider]));
+  const canCreate = allowed.length > 0;
+
+  return `
+    <section class="member-card">
+      <header class="member-card-header">
+        <div>
+          <h2>送迎予約</h2>
+          <p>新しい送迎を申し込みます。送信後は診療所の確認待ちになります。</p>
+        </div>
+      </header>
+      <div class="member-card-body">
+        ${canCreate ? `
+          <form id="member-reservation-form" novalidate>
+            <div class="member-grid">
+              <div class="member-field">
+                <label for="reservation-rider">患者<span class="member-required">必須</span></label>
+                <select id="reservation-rider" name="riderId" required>
+                  ${allowed.map((rider) => `<option value="${escapeHtml(rider.id)}">${escapeHtml(rider.fullName)}</option>`).join("")}
+                </select>
+              </div>
+              <div class="member-field">
+                <label for="reservation-date">送迎日<span class="member-required">必須</span></label>
+                <input id="reservation-date" name="serviceDate" type="date" lang="ja-JP" min="${escapeHtml(today)}" value="${escapeHtml(reservationDate)}" required>
+              </div>
+              <div class="member-field">
+                <label for="reservation-trip-type">利用区分<span class="member-required">必須</span></label>
+                <select id="reservation-trip-type" name="tripType" required>
+                  <option value="round_trip">往復</option>
+                  <option value="outbound_to_clinic">行きのみ</option>
+                  <option value="return_only">帰りのみ</option>
+                </select>
+              </div>
+              <div class="member-field">
+                <label for="reservation-appointment-time">受診予定時刻</label>
+                <select id="reservation-appointment-time" name="appointmentTime">${reservationTimeOptions(reservationDate)}</select>
+              </div>
+              <div class="member-field" data-reservation-field="outbound-time">
+                <label for="reservation-outbound-time">行き希望時間<span class="member-required">必須</span></label>
+                <select id="reservation-outbound-time" name="outboundRequestedTime" required>${reservationTimeOptions(reservationDate)}</select>
+              </div>
+              <div class="member-field" data-reservation-field="return-mode">
+                <label for="reservation-return-mode">帰り方法<span class="member-required">必須</span></label>
+                <select id="reservation-return-mode" name="returnMode" required>
+                  <option value="after_visit_ready">診療終了後に手配</option>
+                  <option value="fixed_time">時間指定</option>
+                </select>
+              </div>
+              <div class="member-field" data-reservation-field="return-time" hidden>
+                <label for="reservation-return-time">帰り希望時間<span class="member-required">必須</span></label>
+                <select id="reservation-return-time" name="returnRequestedTime">${reservationTimeOptions(reservationDate)}</select>
+              </div>
+              <div class="member-field" data-reservation-field="pickup-location">
+                <label for="reservation-pickup-location">お迎え場所<span class="member-required">必須</span></label>
+                <select id="reservation-pickup-location" name="pickupLocationId" required>${reservationLocationOptions(reservationLocations, "pickup")}</select>
+              </div>
+              <div class="member-field">
+                <label for="reservation-clinic-location">診療所<span class="member-required">必須</span></label>
+                <select id="reservation-clinic-location" name="clinicLocationId" required>${reservationLocationOptions(reservationLocations, "clinic")}</select>
+              </div>
+              <div class="member-field" data-reservation-field="return-location">
+                <label for="reservation-return-location">帰り降車場所<span class="member-required">必須</span></label>
+                <select id="reservation-return-location" name="returnDropoffLocationId" required>${reservationLocationOptions(reservationLocations, "return")}</select>
+              </div>
+              <div class="member-field is-full">
+                <label for="reservation-note">診療所への連絡事項</label>
+                <textarea id="reservation-note" name="customerNote" maxlength="1000" placeholder="送迎時に伝えておきたい内容があれば入力してください"></textarea>
+                <p class="member-hint">病名・検査結果・処方など、送迎に不要な医療情報は入力しないでください。</p>
+              </div>
+            </div>
+            <div class="member-actions">
+              <button type="submit" class="member-button is-wide">送迎予約を申し込む</button>
+            </div>
+          </form>
+        ` : '<div class="member-notice is-warning">この患者の新規送迎予約は診療所へご連絡ください。</div>'}
+      </div>
+    </section>
+    <section class="member-card">
+      <header class="member-card-header">
+        <div><h2>予約の状況</h2><p>${escapeHtml(formatDate(serviceDate))}の予約を表示します。</p></div>
+      </header>
+      <div class="member-card-body">
+        ${reservations.length ? `
+          <div class="member-record-list">
+            ${reservations.map((reservation) => {
+              const rider = riderById.get(reservation.riderId);
+              const timeText = [
+                reservation.outboundRequestedTime
+                  ? `行き ${formatTime(reservation.outboundRequestedTime)}`
+                  : null,
+                reservation.returnMode === "fixed_time" && reservation.returnRequestedTime
+                  ? `帰り ${formatTime(reservation.returnRequestedTime)}`
+                  : reservation.returnMode === "after_visit_ready"
+                    ? "帰り 診療終了後"
+                    : null
+              ].filter(Boolean).join("／");
+              const canCancel = ![
+                "completed",
+                "cancelled",
+                "rejected",
+                "cancel_requested"
+              ].includes(reservation.reservationStatus);
+              return `
+                <article class="member-record">
+                  <div class="member-record-top">
+                    <h3>${escapeHtml(rider?.fullName || "患者")}・${escapeHtml(reservationTripTypeLabels[reservation.tripType] || reservation.tripType)}</h3>
+                    <span class="member-status ${statusTone(reservation.reservationStatus)}">${escapeHtml(reservationStatusLabels[reservation.reservationStatus] || reservation.reservationStatus)}</span>
+                  </div>
+                  <p>${escapeHtml(timeText || "時間未設定")}</p>
+                  ${reservation.customerNote ? `<p class="member-record-meta">連絡事項：${escapeHtml(reservation.customerNote)}</p>` : ""}
+                  ${canCancel ? `
+                    <div class="member-actions">
+                      <button
+                        type="button"
+                        class="member-button is-danger"
+                        data-member-action="cancel-reservation"
+                        data-reservation-id="${escapeHtml(reservation.id)}"
+                        data-reservation-version="${escapeHtml(reservation.version)}"
+                      >取消を依頼</button>
+                    </div>` : ""}
+                </article>`;
+            }).join("")}
+          </div>
+        ` : '<div class="member-empty"><strong>この日の予約はありません</strong><p>必要な場合は上のフォームから送迎を申し込めます。</p></div>'}
+      </div>
+    </section>`;
+}
+
+function syncReservationLocationOptions(form) {
+  const riderId = String(form.elements.riderId?.value || "");
+  for (const name of ["pickupLocationId", "returnDropoffLocationId"]) {
+    const select = form.elements[name];
+    if (!select) continue;
+    for (const option of [...select.options]) {
+      if (!option.value) {
+        option.hidden = false;
+        continue;
+      }
+      const locationRiderId = option.dataset.riderId || "";
+      const locationType = option.dataset.locationType || "";
+      option.hidden =
+        locationType !== "facility" &&
+        Boolean(riderId) &&
+        locationRiderId !== riderId;
+    }
+    if (select.selectedOptions[0]?.hidden) {
+      select.value = "";
+    }
+    if (!select.value) {
+      const preferred = [...select.options].find((option) => {
+        if (!option.value || option.hidden) return false;
+        return name === "pickupLocationId"
+          ? option.dataset.defaultPickup === "1"
+          : option.dataset.defaultDropoff === "1";
+      });
+      const fallback = [...select.options].find(
+        (option) => option.value && !option.hidden && option.dataset.locationType !== "facility"
+      );
+      select.value = preferred?.value || fallback?.value || "";
+    }
+  }
+
+  const clinic = form.elements.clinicLocationId;
+  if (clinic && !clinic.value) {
+    const first = [...clinic.options].find((option) => option.value);
+    clinic.value = first?.value || "";
+  }
+}
+
+function syncReservationForm(form) {
+  if (!form) return;
+  const tripType = String(form.elements.tripType?.value || "round_trip");
+  const returnMode = String(form.elements.returnMode?.value || "after_visit_ready");
+
+  const outboundField = form.querySelector('[data-reservation-field="outbound-time"]');
+  const pickupField = form.querySelector('[data-reservation-field="pickup-location"]');
+  const returnModeField = form.querySelector('[data-reservation-field="return-mode"]');
+  const returnTimeField = form.querySelector('[data-reservation-field="return-time"]');
+  const returnLocationField = form.querySelector('[data-reservation-field="return-location"]');
+
+  const hasOutbound = tripType !== "return_only";
+  const hasReturn = tripType !== "outbound_to_clinic";
+  if (outboundField) outboundField.hidden = !hasOutbound;
+  if (pickupField) pickupField.hidden = !hasOutbound;
+  if (returnModeField) returnModeField.hidden = !hasReturn;
+  if (returnLocationField) returnLocationField.hidden = !hasReturn;
+  if (returnTimeField) {
+    returnTimeField.hidden = !hasReturn || returnMode !== "fixed_time";
+  }
+
+  form.elements.outboundRequestedTime.required = hasOutbound;
+  form.elements.pickupLocationId.required = hasOutbound;
+  form.elements.returnMode.required = hasReturn;
+  form.elements.returnDropoffLocationId.required = hasReturn;
+  form.elements.returnRequestedTime.required =
+    hasReturn && returnMode === "fixed_time";
+
+  if (!hasOutbound) {
+    form.elements.outboundRequestedTime.value = "";
+    form.elements.pickupLocationId.value = "";
+  }
+  if (!hasReturn) {
+    form.elements.returnMode.value = "after_visit_ready";
+    form.elements.returnRequestedTime.value = "";
+    form.elements.returnDropoffLocationId.value = "";
+  } else if (returnMode !== "fixed_time") {
+    form.elements.returnRequestedTime.value = "";
+  }
+
+  syncReservationLocationOptions(form);
+}
+
+function refreshReservationTimeOptions(form) {
+  const serviceDate = String(form.elements.serviceDate?.value || "");
+  if (!serviceDate) return;
+  for (const name of [
+    "appointmentTime",
+    "outboundRequestedTime",
+    "returnRequestedTime"
+  ]) {
+    const select = form.elements[name];
+    if (!select) continue;
+    const previous = String(select.value || "");
+    select.innerHTML = reservationTimeOptions(serviceDate, previous);
+    if (
+      previous &&
+      [...select.options].some(
+        (option) => option.value === previous && !option.disabled
+      )
+    ) {
+      select.value = previous;
+    }
+  }
+}
+
+async function submitMemberReservation(
+  form,
+  app,
+  session
+) {
+  if (!form.reportValidity()) return;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const serviceDate = String(values.serviceDate || "");
+  if (isPastJstDate(serviceDate)) {
+    toast("過去日の送迎予約は登録できません。", true);
+    return;
+  }
+
+  const tripType = String(values.tripType || "");
+  const returnMode = tripType === "outbound_to_clinic"
+    ? "none"
+    : String(values.returnMode || "after_visit_ready");
+  const outboundRequestedTime = tripType === "return_only"
+    ? null
+    : String(values.outboundRequestedTime || "") || null;
+  const returnRequestedTime =
+    tripType !== "outbound_to_clinic" && returnMode === "fixed_time"
+      ? String(values.returnRequestedTime || "") || null
+      : null;
+  const appointmentTime =
+    String(values.appointmentTime || "") || null;
+
+  const button = form.querySelector('button[type="submit"]');
+  setBusy(button, true, "送信中…");
+  try {
+    await api("/v1/reservations", {
+      method: "POST",
+      token: session.token,
+      body: {
+        riderId: String(values.riderId || ""),
+        serviceDate,
+        appointmentTime,
+        tripType,
+        returnMode,
+        outboundRequestedTime,
+        returnRequestedTime,
+        pickupLocationId: tripType === "return_only"
+          ? null
+          : String(values.pickupLocationId || "") || null,
+        clinicLocationId:
+          String(values.clinicLocationId || "") || null,
+        returnDropoffLocationId: tripType === "outbound_to_clinic"
+          ? null
+          : String(values.returnDropoffLocationId || "") || null,
+        customerNote:
+          String(values.customerNote || "").trim() || null
+      }
+    });
+    toast("送迎予約を受け付けました。診療所の確認をお待ちください。");
+    await renderHome(app, session, serviceDate);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function requestReservationCancel(
+  button,
+  app,
+  session,
+  serviceDate
+) {
+  const reservationId = String(button.dataset.reservationId || "");
+  const expectedVersion = Number(button.dataset.reservationVersion || 0);
+  if (!reservationId || !expectedVersion) return;
+
+  const reason = window.prompt(
+    "取消理由を入力してください。診療所が確認後に確定します。",
+    ""
+  );
+  if (reason === null) return;
+
+  setBusy(button, true, "送信中…");
+  try {
+    await api(`/v1/reservations/${reservationId}/cancel`, {
+      method: "POST",
+      token: session.token,
+      body: {
+        expectedVersion,
+        reason: String(reason).trim() || null
+      }
+    });
+    toast("取消依頼を送信しました。診療所の確認をお待ちください。");
+    await renderHome(app, session, serviceDate);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 function renderChangeForm(riders, serviceDate) {
@@ -850,10 +1290,58 @@ function updateChangeFields(form) {
   }
 }
 
-function bindHomeActions(app, session, serviceDate) {
+function bindHomeActions(app, session, serviceDate, data) {
   app
     .querySelector('[data-member-action="logout"]')
     ?.addEventListener("click", () => logoutMember(app, session));
+
+  const reservationForm = document.getElementById(
+    "member-reservation-form"
+  );
+  if (reservationForm) {
+    reservationForm.elements.riderId?.addEventListener(
+      "change",
+      () => syncReservationForm(reservationForm)
+    );
+    reservationForm.elements.tripType?.addEventListener(
+      "change",
+      () => syncReservationForm(reservationForm)
+    );
+    reservationForm.elements.returnMode?.addEventListener(
+      "change",
+      () => syncReservationForm(reservationForm)
+    );
+    reservationForm.elements.serviceDate?.addEventListener(
+      "change",
+      () => {
+        refreshReservationTimeOptions(reservationForm);
+        syncReservationForm(reservationForm);
+      }
+    );
+    syncReservationForm(reservationForm);
+    reservationForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await submitMemberReservation(
+        reservationForm,
+        app,
+        session
+      );
+    });
+  }
+
+  for (const button of app.querySelectorAll(
+    '[data-member-action="cancel-reservation"]'
+  )) {
+    button.addEventListener("click", async () => {
+      await requestReservationCancel(
+        button,
+        app,
+        session,
+        serviceDate
+      );
+    });
+  }
+
   const form = document.getElementById("member-change-form");
   if (!form) return;
   form.elements.requestType?.addEventListener("change", () =>
