@@ -12,6 +12,7 @@
   const storageKey =
     config.sessionStorageKey || "dpro_shuttle_session_v1";
   const PHASE3_ADMIN_UI_R1 = true;
+  const PHASE3B_CANCEL_REASON_UI_R1 = true;
 
   const state = {
     token: null,
@@ -2154,7 +2155,24 @@
                     <td data-label="患者・受付"><span class="primary-cell">${escapeHtml(rider?.fullName || "患者不明")}</span><span class="secondary-cell">${escapeHtml(labels.sourceChannel[reservation.sourceChannel] || reservation.sourceChannel)}</span></td>
                     <td data-label="利用"><strong>${escapeHtml(labels.tripType[reservation.tripType] || reservation.tripType)}</strong><br><span class="secondary-cell">${escapeHtml([pickup?.locationName, clinic?.locationName, dropoff?.locationName].filter(Boolean).join(" → ") || "場所未設定")}</span></td>
                     <td data-label="時間">${escapeHtml(times)}</td>
-                    <td data-label="状態">${statusBadge(reservation.reservationStatus, labels.reservationStatus)}</td>
+                    <td data-label="状態">
+                      ${statusBadge(
+                        reservation.reservationStatus,
+                        labels.reservationStatus
+                      )}
+                      ${reservation.cancelRequestReason ? `
+                        <div class="secondary-cell">
+                          取消依頼理由：${escapeHtml(
+                            reservation.cancelRequestReason
+                          )}
+                        </div>` : ""}
+                      ${reservation.cancelReason ? `
+                        <div class="secondary-cell">
+                          取消確定理由：${escapeHtml(
+                            reservation.cancelReason
+                          )}
+                        </div>` : ""}
+                    </td>
                     <td data-label="操作"><div class="row-actions">
                       ${reservation.reservationStatus === "pending" ? `<button type="button" class="row-button" data-action="confirm-reservation" data-id="${escapeHtml(reservation.id)}">予約確認</button>` : ""}
                       ${reservation.returnMode === "after_visit_ready" && ["confirmed", "assigned", "outbound_in_progress", "at_clinic"].includes(reservation.reservationStatus) ? `<button type="button" class="row-button" data-action="return-ready-reservation" data-id="${escapeHtml(reservation.id)}">診療終了</button>` : ""}

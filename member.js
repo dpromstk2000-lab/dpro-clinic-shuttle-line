@@ -1,4 +1,5 @@
 const PHASE3B_MEMBER_UI_R1 = true;
+const PHASE3B_CANCEL_REASON_MEMBER_R1 = true;
 
 const runtimeConfig =
   typeof window !== "undefined"
@@ -992,6 +993,8 @@ function renderReservationSection(
                   </div>
                   <p>${escapeHtml(timeText || "時間未設定")}</p>
                   ${reservation.customerNote ? `<p class="member-record-meta">連絡事項：${escapeHtml(reservation.customerNote)}</p>` : ""}
+                  ${reservation.cancelRequestReason ? `<p class="member-record-meta">取消依頼理由：${escapeHtml(reservation.cancelRequestReason)}</p>` : ""}
+                  ${reservation.cancelReason ? `<p class="member-record-meta">取消確定理由：${escapeHtml(reservation.cancelReason)}</p>` : ""}
                   ${canCancel ? `
                     <div class="member-actions">
                       <button

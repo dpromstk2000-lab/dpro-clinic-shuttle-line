@@ -11,7 +11,8 @@
  */
 
 const SERVICE_NAME = "DPRO Clinic Shuttle API";
-const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R4-20260920";
+const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R4.1-20260920";
+const PHASE3B_CANCEL_REASON_FIX_R1 = true;
 const PHASE3B_MEMBER_RESERVATION_R1 = true;
 const PHASE3_ADMIN_SURFACES_R1 = true;
 const DATABASE_VERSION = "CLINIC-SHUTTLE-V2.1-DB-R2-20260920";
@@ -1103,7 +1104,7 @@ async function handleMemberHome(
     const reservationParams = new URLSearchParams();
     reservationParams.set(
       "select",
-      "id,rider_id,source_channel,service_date,appointment_time,trip_type,return_mode,outbound_requested_time,return_requested_time,pickup_location_id,clinic_location_id,return_dropoff_location_id,reservation_status,customer_note,version,cancel_requested_at,cancelled_at,created_at,updated_at"
+      "id,rider_id,source_channel,service_date,appointment_time,trip_type,return_mode,outbound_requested_time,return_requested_time,pickup_location_id,clinic_location_id,return_dropoff_location_id,reservation_status,customer_note,version,cancel_requested_at,cancel_request_reason,cancelled_at,cancel_reason,created_at,updated_at"
     );
     reservationParams.set(
       "facility_id",
@@ -4632,7 +4633,9 @@ function publicReservation(row) {
     internalNote: row.internal_note ?? null,
     version: row.version,
     cancelRequestedAt: row.cancel_requested_at ?? null,
+    cancelRequestReason: row.cancel_request_reason ?? null,
     cancelledAt: row.cancelled_at ?? null,
+    cancelReason: row.cancel_reason ?? null,
     createdAt: row.created_at ?? null,
     updatedAt: row.updated_at ?? null,
   };
@@ -4658,7 +4661,9 @@ function publicMemberReservation(row) {
     customerNote: row.customer_note ?? null,
     version: row.version,
     cancelRequestedAt: row.cancel_requested_at ?? null,
+    cancelRequestReason: row.cancel_request_reason ?? null,
     cancelledAt: row.cancelled_at ?? null,
+    cancelReason: row.cancel_reason ?? null,
     createdAt: row.created_at ?? null,
     updatedAt: row.updated_at ?? null,
   };
@@ -4935,7 +4940,7 @@ async function loadReservationForAccess(env, session, reservationId) {
   const params = new URLSearchParams();
   params.set(
     "select",
-    "id,facility_id,rider_id,guardian_id,requested_by_staff_id,source_channel,service_date,appointment_time,external_appointment_ref,trip_type,return_mode,outbound_requested_time,return_requested_time,pickup_location_id,clinic_location_id,return_dropoff_location_id,reservation_status,customer_note,internal_note,idempotency_key,version,cancel_requested_at,cancelled_at,created_at,updated_at"
+    "id,facility_id,rider_id,guardian_id,requested_by_staff_id,source_channel,service_date,appointment_time,external_appointment_ref,trip_type,return_mode,outbound_requested_time,return_requested_time,pickup_location_id,clinic_location_id,return_dropoff_location_id,reservation_status,customer_note,internal_note,idempotency_key,version,cancel_requested_at,cancel_request_reason,cancelled_at,cancel_reason,created_at,updated_at"
   );
   params.set("id", `eq.${reservationId}`);
   params.set("facility_id", `eq.${session.facilityId}`);
@@ -4966,7 +4971,7 @@ async function handleReservationList(request, env, corsOrigin, requestId) {
   const params = new URLSearchParams();
   params.set(
     "select",
-    "id,facility_id,rider_id,guardian_id,requested_by_staff_id,source_channel,service_date,appointment_time,external_appointment_ref,trip_type,return_mode,outbound_requested_time,return_requested_time,pickup_location_id,clinic_location_id,return_dropoff_location_id,reservation_status,customer_note,internal_note,idempotency_key,version,cancel_requested_at,cancelled_at,created_at,updated_at"
+    "id,facility_id,rider_id,guardian_id,requested_by_staff_id,source_channel,service_date,appointment_time,external_appointment_ref,trip_type,return_mode,outbound_requested_time,return_requested_time,pickup_location_id,clinic_location_id,return_dropoff_location_id,reservation_status,customer_note,internal_note,idempotency_key,version,cancel_requested_at,cancel_request_reason,cancelled_at,cancel_reason,created_at,updated_at"
   );
   params.set("facility_id", `eq.${session.facilityId}`);
   params.set("deleted_at", "is.null");
@@ -5263,14 +5268,21 @@ async function handleReservationCancel(request, env, corsOrigin, requestId, rese
     ? {
         reservation_status: "cancel_requested",
         cancel_requested_at: new Date().toISOString(),
-        customer_note: reason || current.customer_note,
+        cancel_request_reason:
+          reason || current.cancel_request_reason || null,
       }
     : {
         reservation_status: "cancelled",
-        cancel_requested_at: current.cancel_requested_at || new Date().toISOString(),
+        cancel_requested_at:
+          current.cancel_requested_at || new Date().toISOString(),
         cancelled_at: new Date().toISOString(),
-        cancelled_by_staff_id: isUuid(session.actorId) ? session.actorId : null,
-        internal_note: reason || current.internal_note,
+        cancelled_by_staff_id:
+          isUuid(session.actorId) ? session.actorId : null,
+        cancel_reason:
+          reason ||
+          current.cancel_reason ||
+          current.cancel_request_reason ||
+          null,
       };
 
   const rows = await supabaseRequest(env, `shuttle_reservations?${params.toString()}`, {
@@ -5283,12 +5295,31 @@ async function handleReservationCancel(request, env, corsOrigin, requestId, rese
     facilityId: session.facilityId,
     actorType: session.actorType,
     actorId: session.actorId,
-    action: guardianRequest ? "request_reservation_cancel" : "cancel_reservation",
+    action: guardianRequest
+      ? "request_reservation_cancel"
+      : "cancel_reservation",
     entityType: "reservation",
     entityId: reservationId,
-    requestId, request,
+    requestId,
+    request,
+    newData: {
+      reservationStatus: reservation.reservation_status,
+      cancelRequestReason:
+        reservation.cancel_request_reason ?? null,
+      cancelReason: reservation.cancel_reason ?? null,
+    },
   });
-  return successResponse({ reservation: publicReservationForSession(reservation, session) }, 200, corsOrigin, requestId);
+  return successResponse(
+    {
+      reservation: publicReservationForSession(
+        reservation,
+        session
+      ),
+    },
+    200,
+    corsOrigin,
+    requestId
+  );
 }
 
 async function handleReservationReturnReady(request, env, corsOrigin, requestId, reservationId) {

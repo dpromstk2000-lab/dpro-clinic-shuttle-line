@@ -152,7 +152,7 @@
     "FACTORY FINAL 4/4",
     "FINAL LOCK and return ZIP"
   ],
-  "current_stage": "PHASE3B_MEMBER_RESERVATION_IMPLEMENTED_PENDING_RUNTIME_QA",
+  "current_stage": "PHASE3B_CANCEL_REASON_FIX_PENDING_RUNTIME_QA",
   "phase3": {
     "admin_reservation_ui": true,
     "phone_proxy_reservation": true,
@@ -169,6 +169,8 @@
     "family_line_new_reservation_ui": true,
     "guardian_reservation_privacy": true,
     "reservation_location_guard": true,
-    "reservation_past_datetime_guard": true
+    "reservation_past_datetime_guard": true,
+    "cancel_reason_preservation": true,
+    "cancel_reason_admin_visibility": true
   }
 }

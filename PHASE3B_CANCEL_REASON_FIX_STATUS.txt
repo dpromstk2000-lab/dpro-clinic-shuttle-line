@@ -1,0 +1,22 @@
+DPRO 診療所送迎予約 / PHASE 3-B CANCEL REASON FIX
+
+QA FINDING:
+- 家族の取消理由が customer_note を上書きしていた。
+- 管理側の取消理由も internal_note を上書きする設計だった。
+
+FIX:
+- cancel_request_reason を追加
+- cancel_reason を追加
+- customer_note / internal_note を保持
+- 家族側と管理側で取消理由を表示
+- 取消監査ログに取消理由を保持
+- Worker / Frontend version R4.1
+
+DB:
+- Schema migration is already applied to the demo Supabase project.
+- This package synchronizes migration source into GitHub.
+
+NEXT:
+- 管理側で取消依頼理由表示を確認
+- 管理側で取消確定
+- 家族側で取消確定表示を確認
