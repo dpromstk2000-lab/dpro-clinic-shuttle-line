@@ -1,0 +1,20 @@
+DPRO 診療所送迎予約 / PHASE 3-C NOTIFICATION MESSAGE FIX
+
+QA FINDINGS:
+1. 通知時刻がUTC文字列を直接切り出し、16:00便を07:00と表示した。
+2. 通知本文の改行が実改行ではなく "\\n" 文字列になっていた。
+3. 送り便でも現場ボタン/通知が「お迎えへ出発」と表示されていた。
+
+FIX:
+- 通知時刻を Asia/Tokyo で整形
+- 通知本文を実改行に修正
+- 迎え/送り/施設間移送で出発文言を切替
+- Worker / Frontend version R5.1
+
+RUNTIME RE-QA:
+- 16:00送り便の別患者で出発→乗車→到着
+- departure row: skipped / line_not_linked
+- boarding row: 0件（設定OFF）
+- arrival row: skipped / line_not_linked
+- 通知本文の乗車予定が16:00
+- 送り便文言が「送り便が診療所を出発」

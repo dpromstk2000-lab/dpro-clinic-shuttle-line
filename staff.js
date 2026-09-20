@@ -51,6 +51,21 @@ const EVENT_LABELS = Object.freeze({
   cancelled: "キャンセル"
 });
 
+const PHASE3C_SERVICE_AWARE_EVENT_LABELS_R1 = true;
+
+function eventLabelForService(eventType, serviceType) {
+  if (eventType !== "en_route") {
+    return EVENT_LABELS[eventType] || eventType;
+  }
+  if (serviceType === "dropoff") {
+    return "送りへ出発";
+  }
+  if (serviceType === "transfer") {
+    return "移送へ出発";
+  }
+  return "お迎えへ出発";
+}
+
 const TERMINAL_STOP_STATUSES = new Set([
   "completed",
   "cancelled",
@@ -758,13 +773,13 @@ function createStaffApplication() {
           : ""}
         <div class="stop-list">
           ${stops.length
-            ? stops.map(renderStopCard).join("")
+            ? stops.map((stop) => renderStopCard(stop, run.serviceType)).join("")
             : '<div class="empty-state"><h2>乗車予定はありません</h2><p>この便には患者が登録されていません。</p></div>'}
         </div>
       </article>`;
   }
 
-  function renderStopCard(stop) {
+  function renderStopCard(stop, serviceType) {
     const actions = nextStopActions(stop);
     const terminal = TERMINAL_STOP_STATUSES.has(stop.stopStatus);
     const rider = stop.rider || {};
@@ -804,7 +819,7 @@ function createStaffApplication() {
               <button type="button" class="button ${action.tone === "secondary" ? "button-secondary" : action.tone === "danger" ? "button-danger" : "is-primary"}"
                 data-event-type="${escapeHtml(action.eventType)}"
                 data-stop-id="${escapeHtml(stop.id)}">
-                ${escapeHtml(EVENT_LABELS[action.eventType] || action.eventType)}
+                ${escapeHtml(eventLabelForService(action.eventType, serviceType))}
               </button>`).join("")}</div>`
           : ""}
       </section>`;
@@ -842,8 +857,12 @@ function createStaffApplication() {
   }
 
   function openEventDialog(button) {
-    const stop = state.runs
-      .flatMap((run) => run.stops || [])
+    const run = state.runs.find((item) =>
+      (item.stops || []).some(
+        (stop) => stop.id === button.dataset.stopId
+      )
+    );
+    const stop = (run?.stops || [])
       .find((item) => item.id === button.dataset.stopId);
     const eventType = button.dataset.eventType;
     if (!stop || !nextStopActions(stop).some((action) => action.eventType === eventType)) {
@@ -864,7 +883,10 @@ function createStaffApplication() {
       idempotencyKey
     };
     document.getElementById("event-dialog-title").textContent =
-      EVENT_LABELS[eventType] || "状態を更新";
+      eventLabelForService(
+        eventType,
+        run?.serviceType
+      ) || "状態を更新";
     document.getElementById("event-dialog-description").textContent =
       `${stop.rider?.fullName || "患者"}さんの状態を「${
         STOP_STATUS_LABELS[eventStatus(eventType)] || eventType

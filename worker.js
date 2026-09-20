@@ -11,7 +11,8 @@
  */
 
 const SERVICE_NAME = "DPRO Clinic Shuttle API";
-const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R5-20260920";
+const WORKER_VERSION = "CLINIC-SHUTTLE-V2.1-WORKER-R5.1-20260920";
+const PHASE3C_NOTIFICATION_MESSAGE_FIX_R1 = true;
 const PHASE3C_NOTIFICATION_DELIVERY_R1 = true;
 const PHASE3B_CANCEL_REASON_FIX_R1 = true;
 const PHASE3B_MEMBER_RESERVATION_R1 = true;
@@ -4398,12 +4399,34 @@ function jstTomorrowDateString() {
 
 function notificationTimeLabel(value) {
   if (!value) return "未定";
+
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
   const raw = String(value);
-  const match = raw.match(/T(\d{2}):(\d{2})/);
-  if (match) return `${match[1]}:${match[2]}`;
   const timeMatch = raw.match(/^(\d{2}):(\d{2})/);
-  if (timeMatch) return `${timeMatch[1]}:${timeMatch[2]}`;
+  if (timeMatch) {
+    return `${timeMatch[1]}:${timeMatch[2]}`;
+  }
+
   return "未定";
+}
+
+function notificationDepartureText(serviceType, riderName) {
+  if (serviceType === "dropoff") {
+    return `${riderName}さんの送り便が診療所を出発しました。`;
+  }
+  if (serviceType === "transfer") {
+    return `${riderName}さんの施設間移送便が出発しました。`;
+  }
+  return `${riderName}さんのお迎えに向けて送迎車が出発しました。`;
 }
 
 function buildTransportNotificationMessage(
@@ -4429,15 +4452,18 @@ function buildTransportNotificationMessage(
       `乗車予定：${pickupTime}`,
       `降車予定：${dropoffTime}`,
       "変更・欠席がある場合は、ご家族用画面または診療所へご連絡ください。",
-    ].filter(Boolean).join("\\n");
+    ].filter(Boolean).join("\n");
   }
 
   if (notificationType === "departure") {
     return [
       "【DPRO 診療所送迎予約】",
-      `${riderName}さんのお迎えに向けて送迎車が出発しました。`,
+      notificationDepartureText(
+        context.run?.service_type,
+        riderName
+      ),
       `乗車予定：${pickupTime}`,
-    ].join("\\n");
+    ].join("\n");
   }
 
   if (notificationType === "boarding") {
@@ -4445,20 +4471,20 @@ function buildTransportNotificationMessage(
       "【DPRO 診療所送迎予約】",
       `${riderName}さんの乗車を確認しました。`,
       `降車予定：${dropoffTime}`,
-    ].join("\\n");
+    ].join("\n");
   }
 
   if (notificationType === "arrival") {
     return [
       "【DPRO 診療所送迎予約】",
       `${riderName}さんの到着を確認しました。`,
-    ].join("\\n");
+    ].join("\n");
   }
 
   return [
     "【DPRO 診療所送迎予約】",
     `${riderName}さんの送迎状況が更新されました。`,
-  ].join("\\n");
+  ].join("\n");
 }
 
 async function loadStopNotificationContext(

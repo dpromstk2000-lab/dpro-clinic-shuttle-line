@@ -4,7 +4,7 @@ window.DPRO_SHUTTLE_CONFIG = Object.freeze({
   apiBaseUrl: "https://dpro-clinic-shuttle-line-api.dpromstk2000.workers.dev",
   facilityCode: "dpro_clinic_shuttle_demo",
   environment: "demo",
-  version: "CLINIC-SHUTTLE-V2.1-R5-20260920",
+  version: "CLINIC-SHUTTLE-V2.1-R5.1-20260920",
   databaseSchema: "dpro_clinic_shuttle",
   reservationSlotMinutes: 30,
   timezone: "Asia/Tokyo",

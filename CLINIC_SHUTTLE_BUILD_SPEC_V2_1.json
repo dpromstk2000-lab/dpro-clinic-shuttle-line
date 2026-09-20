@@ -152,7 +152,7 @@
     "FACTORY FINAL 4/4",
     "FINAL LOCK and return ZIP"
   ],
-  "current_stage": "PHASE3C_NOTIFICATION_DELIVERY_IMPLEMENTED_PENDING_RUNTIME_QA",
+  "current_stage": "PHASE3C_NOTIFICATION_MESSAGE_FIX_PENDING_RUNTIME_REQA",
   "phase3": {
     "admin_reservation_ui": true,
     "phone_proxy_reservation": true,
@@ -182,6 +182,9 @@
       "departure",
       "boarding",
       "arrival"
-    ]
+    ],
+    "notification_jst_time_format": true,
+    "notification_real_linebreaks": true,
+    "service_aware_departure_copy": true
   }
 }
